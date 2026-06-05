@@ -1,0 +1,37 @@
+Private Enterprise AI Platform deployed successfully!
+
+Environment: {{ .Values.global.environment }}
+Domain: {{ .Values.global.domain }}
+
+Enabled Services:
+{{- if .Values.vllm.enabled }}
+  ✓ vLLM (Model: {{ .Values.vllm.model.name }})
+{{- end }}
+{{- if .Values.infinity.enabled }}
+  ✓ Infinity Embeddings (Model: {{ .Values.infinity.model.name }})
+{{- end }}
+{{- if .Values.apiGateway.enabled }}
+  ✓ API Gateway
+{{- end }}
+{{- if .Values.ragService.enabled }}
+  ✓ RAG Service
+{{- end }}
+{{- if .Values.agentService.enabled }}
+  ✓ Agent Service
+{{- end }}
+{{- if .Values.mcpCatalog.enabled }}
+  ✓ MCP Catalog
+{{- end }}
+
+GPU Configuration:
+  Enabled: {{ .Values.global.gpu.enabled }}
+{{- if .Values.global.gpu.enabled }}
+  Resource: {{ .Values.global.gpu.resourceName }}
+  Node Selector: {{ .Values.global.gpu.nodeSelector }}
+{{- end }}
+
+To check the status:
+  kubectl get pods -n {{ .Release.Namespace }}
+
+To view logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}

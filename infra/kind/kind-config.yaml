@@ -1,0 +1,40 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: private-ai
+
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30030
+        hostPort: 30030
+        protocol: TCP
+      - containerPort: 30090
+        hostPort: 30090
+        protocol: TCP
+      - containerPort: 30432
+        hostPort: 30432
+        protocol: TCP
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+      - containerPort: 30443
+        hostPort: 30443
+        protocol: TCP
+
+  - role: worker
+    extraMounts:
+      # Mount NVIDIA runtime and devices
+      - hostPath: /usr/bin/nvidia-smi
+        containerPath: /usr/bin/nvidia-smi
+      - hostPath: /usr/bin/nvidia-ctk
+        containerPath: /usr/bin/nvidia-ctk
+      - hostPath: /dev/nvidia0
+        containerPath: /dev/nvidia0
+      - hostPath: /dev/nvidiactl
+        containerPath: /dev/nvidiactl
+      - hostPath: /dev/nvidia-uvm
+        containerPath: /dev/nvidia-uvm
+      - hostPath: /dev/nvidia-uvm-tools
+        containerPath: /dev/nvidia-uvm-tools
+    labels:
+      nvidia.com/gpu: "true"

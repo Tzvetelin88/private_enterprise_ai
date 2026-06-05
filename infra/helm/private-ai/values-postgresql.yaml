@@ -1,0 +1,78 @@
+auth:
+  database: private_ai
+  username: private_ai
+  password: "changeme-private-ai-user"
+  postgresPassword: "changeme-postgres-admin"
+
+primary:
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+
+  resources:
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+    requests:
+      memory: 1Gi
+      cpu: 500m
+  
+  service:
+    type: NodePort
+    nodePorts:
+      postgresql: 30432
+
+  initdb:
+    scripts:
+      01-init-extensions.sql: |
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+      02-init-schemas.sql: |
+        -- Tenants table
+        CREATE TABLE IF NOT EXISTS tenants (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          name VARCHAR(255) NOT NULL UNIQUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Documents table
+        CREATE TABLE IF NOT EXISTS documents (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          filename VARCHAR(512) NOT NULL,
+          content_type VARCHAR(100),
+          size_bytes BIGINT,
+          status VARCHAR(50) DEFAULT 'pending',
+          metadata JSONB DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_documents_tenant ON documents(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+
+        -- Chunks table
+        CREATE TABLE IF NOT EXISTS chunks (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          chunk_index INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          metadata JSONB DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
+        CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON chunks(tenant_id);
+
+        -- Note: Embeddings table will be added in Stage 4 when pgvector is properly installed
+
+        -- Insert default tenant for development
+        INSERT INTO tenants (name) VALUES ('default') ON CONFLICT (name) DO NOTHING;
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false

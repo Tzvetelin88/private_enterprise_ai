@@ -1,0 +1,128 @@
+adminPassword: "admin"
+
+persistence:
+  enabled: true
+  size: 5Gi
+
+resources:
+  limits:
+    memory: 512Mi
+    cpu: 500m
+  requests:
+    memory: 256Mi
+    cpu: 250m
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server:80
+        access: proxy
+        isDefault: true
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    gpu-metrics:
+      json: |
+          {
+            "dashboard": {
+              "title": "GPU Metrics",
+              "panels": [
+                {
+                  "title": "GPU Utilization",
+                  "targets": [
+                    {
+                      "expr": "DCGM_FI_DEV_GPU_UTIL"
+                    }
+                  ],
+                  "type": "graph"
+                },
+                {
+                  "title": "GPU Memory Usage",
+                  "targets": [
+                    {
+                      "expr": "DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_FREE * 100"
+                    }
+                  ],
+                  "type": "graph"
+                },
+                {
+                  "title": "GPU Temperature",
+                  "targets": [
+                    {
+                      "expr": "DCGM_FI_DEV_GPU_TEMP"
+                    }
+                  ],
+                  "type": "graph"
+                },
+                {
+                  "title": "GPU Power Usage",
+                  "targets": [
+                    {
+                      "expr": "DCGM_FI_DEV_POWER_USAGE"
+                    }
+                  ],
+                  "type": "graph"
+                }
+              ]
+            }
+          }
+
+    kubernetes-cluster:
+      json: |
+          {
+            "dashboard": {
+              "title": "Kubernetes Cluster Overview",
+              "panels": [
+                {
+                  "title": "Pod Status",
+                  "targets": [
+                    {
+                      "expr": "kube_pod_status_phase"
+                    }
+                  ],
+                  "type": "stat"
+                },
+                {
+                  "title": "CPU Usage",
+                  "targets": [
+                    {
+                      "expr": "sum(rate(container_cpu_usage_seconds_total[5m])) by (pod)"
+                    }
+                  ],
+                  "type": "graph"
+                },
+                {
+                  "title": "Memory Usage",
+                  "targets": [
+                    {
+                      "expr": "sum(container_memory_usage_bytes) by (pod)"
+                    }
+                  ],
+                  "type": "graph"
+                }
+              ]
+            }
+          }
+
+service:
+  type: NodePort
+  nodePort: 30030
+
+ingress:
+  enabled: false

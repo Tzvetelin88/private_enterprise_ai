@@ -1,0 +1,114 @@
+global:
+  domain: private-ai.local
+  environment: development
+
+  gpu:
+    enabled: true
+    resourceName: nvidia.com/gpu
+    nodeSelector:
+      nvidia.com/gpu: "true"
+
+vllm:
+  enabled: true
+  replicaCount: 1
+
+  model:
+    name: "meta-llama/Llama-3.2-3B-Instruct"
+    maxModelLen: 4096
+    gpuMemoryUtilization: 0.9
+
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      memory: 8Gi
+    requests:
+      nvidia.com/gpu: 1
+      memory: 4Gi
+
+infinity:
+  enabled: true
+  replicaCount: 1
+
+  model:
+    name: "BAAI/bge-small-en-v1.5"
+
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      memory: 4Gi
+    requests:
+      nvidia.com/gpu: 1
+      memory: 2Gi
+
+apiGateway:
+  enabled: false
+  replicaCount: 1
+
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      memory: 256Mi
+
+ragService:
+  enabled: false
+  replicaCount: 1
+
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      memory: 512Mi
+
+agentService:
+  enabled: false
+  replicaCount: 1
+
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      memory: 512Mi
+
+mcpCatalog:
+  enabled: false
+  replicaCount: 1
+
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      memory: 256Mi
+
+postgresql:
+  enabled: false
+  auth:
+    database: private_ai
+    username: private_ai
+
+  primary:
+    resources:
+      limits:
+        memory: 2Gi
+      requests:
+        memory: 1Gi
+
+keycloak:
+  enabled: false
+  auth:
+    adminUser: admin
+
+vault:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false
+
+loki:
+  enabled: false
+
+tempo:
+  enabled: false

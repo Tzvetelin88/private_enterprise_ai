@@ -1,0 +1,50 @@
+server:
+  global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+
+  resources:
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+    requests:
+      memory: 1Gi
+      cpu: 500m
+
+  retention: "15d"
+
+  service:
+    type: NodePort
+    nodePort: 30090
+
+extraScrapeConfigs: |
+  - job_name: 'gpu-metrics'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - gpu-operator
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: nvidia-dcgm-exporter
+
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['postgresql-metrics:9187']
+
+alertmanager:
+  enabled: false
+
+pushgateway:
+  enabled: false
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true

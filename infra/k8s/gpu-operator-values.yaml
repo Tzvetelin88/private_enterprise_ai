@@ -1,0 +1,37 @@
+toolkit:
+  enabled: true
+
+operator:
+  defaultRuntime: containerd
+
+driver:
+  enabled: false
+
+devicePlugin:
+  enabled: true
+  config:
+    name: time-slicing-config
+    default: "any"
+
+dcgm:
+  enabled: true
+
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+gfd:
+  enabled: true
+
+nodeStatusExporter:
+  enabled: true
+
+migManager:
+  enabled: false
+
+validator:
+  plugin:
+    env:
+      - name: WITH_WORKLOAD
+        value: "true"
