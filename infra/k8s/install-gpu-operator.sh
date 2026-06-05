@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "🎯 Installing NVIDIA GPU Operator..."
 
 echo "📦 Adding NVIDIA Helm repository..."
@@ -13,7 +15,7 @@ kubectl create namespace gpu-operator --dry-run=client -o yaml | kubectl apply -
 echo "⚙️  Installing GPU Operator..."
 helm upgrade --install gpu-operator nvidia/gpu-operator \
   --namespace gpu-operator \
-  --values gpu-operator-values.yaml \
+  --values "$SCRIPT_DIR/gpu-operator-values.yaml" \
   --wait \
   --timeout 10m
 

@@ -41,8 +41,9 @@ make deploy-stage0
 # Stage 1: Core Infrastructure (PostgreSQL + Observability)
 make deploy-stage1
 
-# Stage 2: Model Serving (vLLM + Infinity) - Coming soon
-make deploy-stage2
+# Stage 2: Model Inference Runtime
+# Note: For WSL2, run vLLM externally (see below)
+make deploy-stage2  # For production/bare-metal with GPU
 ```
 
 **Option 3: Manual Deployment**
@@ -58,29 +59,51 @@ bash scripts/install-stage1.sh
 
 **Access Services After Installation:**
 ```bash
-# Grafana (GPU dashboards)
+# Grafana (monitoring dashboards)
 http://localhost:30030
 Username: admin
 Password: admin
 
 # Prometheus (metrics)
-kubectl port-forward svc/prometheus-server 9090:80
+http://localhost:30090
+
+# PostgreSQL (external access)
+Host: <WSL2_IP>
+Port: 30432
+Username: postgres
+Password: changeme-postgres-admin
 
 # Verify deployment
 kubectl get pods --all-namespaces
 ```
 
+**Stage 2: Running vLLM Locally (WSL2)**
+```bash
+# Install vLLM
+pip install vllm
+
+# Start vLLM server (downloads model on first run)
+bash scripts/run-vllm-local.sh
+
+# Test endpoints
+curl http://localhost:8000/health
+curl http://localhost:8000/v1/models
+```
+
 ## Project Status
 
-**Current Stage**: Stage 1 - Core Infrastructure
-**Status**: Complete
-**Last Updated**: 2026-05-24
+**Current Stage**: Stage 2 - Model Inference Runtime
+**Status**: In Progress (vLLM running externally for WSL2 compatibility)
+**Last Updated**: 2026-06-05
 
 **Completed Stages:**
-- ✅ Stage 0: Foundation Setup (kind + GPU Operator)
+- ✅ Stage 0: Foundation Setup (kind cluster + GPU Operator)
 - ✅ Stage 1: Core Infrastructure (PostgreSQL + Prometheus + Grafana)
+- 🔄 Stage 2: Model Inference Runtime (vLLM external for WSL2/GPU compatibility)
 
-**Next:** Stage 2 - Model Serving (vLLM + Infinity)
+**Next:** Stage 3 - API Gateway
+
+**Note**: Due to WSL2 + kind GPU passthrough limitations, vLLM runs outside Kubernetes during development. Production deployments on bare metal/cloud work as designed.
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed stage-by-stage roadmap.
 

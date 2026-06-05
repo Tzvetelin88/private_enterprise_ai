@@ -1,0 +1,54 @@
+image:
+  repository: vllm/vllm-openai
+  tag: "v0.6.0"
+  pullPolicy: IfNotPresent
+
+model:
+  # Model to serve - Llama-3.2-3B fits in 8GB VRAM
+  name: "meta-llama/Llama-3.2-3B-Instruct"
+  # Download from HuggingFace
+  downloadOnStart: true
+  # Model storage path
+  cachePath: "/models"
+
+resources:
+  limits:
+    nvidia.com/gpu: 1
+    memory: 8Gi
+    cpu: 4000m
+  requests:
+    nvidia.com/gpu: 1
+    memory: 4Gi
+    cpu: 2000m
+
+service:
+  type: NodePort
+  port: 8000
+  nodePort: 30800
+
+storage:
+  enabled: true
+  existingClaim: "model-storage"
+  mountPath: "/models"
+
+env:
+  # vLLM configuration
+  - name: VLLM_GPU_MEMORY_UTILIZATION
+    value: "0.9"
+  - name: VLLM_MAX_MODEL_LEN
+    value: "2048"
+  # HuggingFace token (optional - needed for gated models)
+  # - name: HUGGING_FACE_HUB_TOKEN
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: huggingface-token
+  #       key: token
+
+replicaCount: 1
+
+nodeSelector:
+  nvidia.com/gpu: "true"
+
+tolerations: []
+
+affinity: {}
