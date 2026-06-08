@@ -1,0 +1,24 @@
+image:
+  repository: api-gateway
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: NodePort
+  port: 8080
+  nodePort: 30880
+
+config:
+  vllmUrl: "http://host.docker.internal:8000"  # For WSL2 development
+  # vllmUrl: "http://vllm:8000"  # For production in-cluster
+  debug: false
+
+resources:
+  limits:
+    memory: 512Mi
+    cpu: 500m
+  requests:
+    memory: 256Mi
+    cpu: 250m

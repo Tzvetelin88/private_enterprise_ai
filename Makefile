@@ -1,4 +1,4 @@
-.PHONY: help install dev-install test lint format clean kind-up kind-down gpu-verify deploy-all deploy-stage0 deploy-stage1 deploy-stage2
+.PHONY: help install dev-install test lint format clean kind-up kind-down gpu-verify deploy-all deploy-stage0 deploy-stage1 deploy-stage2 deploy-stage3
 
 help:
 	@echo "Available commands:"
@@ -16,6 +16,7 @@ help:
 	@echo "  make deploy-stage0 - Deploy Stage 0 (Foundation)"
 	@echo "  make deploy-stage1 - Deploy Stage 1 (Core Infrastructure)"
 	@echo "  make deploy-stage2 - Deploy Stage 2 (Model Serving)"
+	@echo "  make deploy-stage3 - Deploy Stage 3 (API Gateway)"
 	@echo ""
 	@echo "Cluster Management:"
 	@echo "  make kind-up       - Create kind cluster with GPU support"
@@ -65,3 +66,6 @@ deploy-stage1:
 
 deploy-stage2:
 	bash scripts/install-all.sh 2
+
+deploy-stage3:
+	bash scripts/install-all.sh 3

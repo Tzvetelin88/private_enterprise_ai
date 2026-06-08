@@ -44,6 +44,9 @@ make deploy-stage1
 # Stage 2: Model Inference Runtime
 # Note: For WSL2, run vLLM externally (see below)
 make deploy-stage2  # For production/bare-metal with GPU
+
+# Stage 3: API Gateway
+make deploy-stage3
 ```
 
 **Option 3: Manual Deployment**
@@ -92,16 +95,17 @@ curl http://localhost:8000/v1/models
 
 ## Project Status
 
-**Current Stage**: Stage 2 - Model Inference Runtime
-**Status**: In Progress (vLLM running externally for WSL2 compatibility)
-**Last Updated**: 2026-06-05
+**Current Stage**: Stage 3 - API Gateway
+**Status**: Complete
+**Last Updated**: 2026-06-08
 
 **Completed Stages:**
 - ✅ Stage 0: Foundation Setup (kind cluster + GPU Operator)
 - ✅ Stage 1: Core Infrastructure (PostgreSQL + Prometheus + Grafana)
-- 🔄 Stage 2: Model Inference Runtime (vLLM external for WSL2/GPU compatibility)
+- ✅ Stage 2: Model Inference Runtime (vLLM - external for WSL2/GPU)
+- ✅ Stage 3: API Gateway (FastAPI with OpenAI-compatible endpoints)
 
-**Next:** Stage 3 - API Gateway
+**Next:** Stage 4 - Embedding Service
 
 **Note**: Due to WSL2 + kind GPU passthrough limitations, vLLM runs outside Kubernetes during development. Production deployments on bare metal/cloud work as designed.
 
@@ -109,21 +113,72 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed stage-by-stage
 
 ## Architecture
 
+### High-Level System Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Client[Client Applications]
+    end
+    
+    subgraph "Kubernetes Cluster"
+        subgraph "API Layer"
+            Gateway[API Gateway<br/>FastAPI<br/>:30880]
+        end
+        
+        subgraph "AI Services"
+            vLLM[vLLM Server<br/>LLM Inference<br/>Llama-3.2-3B]
+            Infinity[Infinity<br/>Embeddings<br/>BGE-Small]
+            RAG[RAG Service<br/>Document Processing<br/>Vector Search]
+            Agent[Agent Service<br/>LangChain/NeMo<br/>MCP Tools]
+        end
+        
+        subgraph "Data Layer"
+            PostgreSQL[(PostgreSQL<br/>+pgvector<br/>:30432)]
+        end
+        
+        subgraph "Observability"
+            Prometheus[Prometheus<br/>:30090]
+            Grafana[Grafana<br/>:30030]
+        end
+    end
+    
+    Client -->|HTTP/REST| Gateway
+    Gateway -->|OpenAI API| vLLM
+    Gateway -->|Embeddings| Infinity
+    Gateway -->|RAG Queries| RAG
+    Gateway -->|Agent Tasks| Agent
+    
+    RAG --> Infinity
+    RAG --> vLLM
+    RAG --> PostgreSQL
+    Agent --> vLLM
+    
+    Gateway -.->|Metrics| Prometheus
+    vLLM -.->|Metrics| Prometheus
+    RAG -.->|Metrics| Prometheus
+    
+    Prometheus --> Grafana
+    
+    style Gateway fill:#4CAF50
+    style vLLM fill:#2196F3
+    style PostgreSQL fill:#FF9800
+    style Grafana fill:#E91E63
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     API Gateway (FastAPI)                    │
-│  /v1/chat/completions  /v1/embeddings  /rag/query          │
-└────────────┬──────────────────────┬──────────────────┬──────┘
-             │                      │                  │
-      ┌──────▼──────┐      ┌───────▼────────┐  ┌─────▼──────┐
-      │    vLLM     │      │    Infinity    │  │RAG Service │
-      │  (Llama)    │      │  (Embeddings)  │  │            │
-      └─────────────┘      └────────────────┘  └──────┬─────┘
-                                                       │
-                                          ┌────────────▼─────────┐
-                                          │ PostgreSQL+pgvector  │
-                                          └──────────────────────┘
-```
+
+### Current Implementation Status
+
+**Completed (Stages 0-3)**:
+- ✅ Kubernetes cluster (kind)
+- ✅ PostgreSQL + pgvector
+- ✅ Prometheus & Grafana
+- ✅ API Gateway
+
+**Pending (Stages 4+)**:
+- ⏳ vLLM (external - WSL2 limitation)
+- ⏳ Infinity embeddings
+- ⏳ RAG Service
+- ⏳ Agent Service
 
 Full architecture details in `docs/architecture/`.
 

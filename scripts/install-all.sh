@@ -64,6 +64,23 @@ function run_stage2() {
     echo ""
 }
 
+function run_stage3() {
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "  STAGE 3: API Gateway"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+
+    cd "$PROJECT_ROOT"
+    if [ -f scripts/install-stage3.sh ]; then
+        bash scripts/install-stage3.sh
+        echo ""
+        echo "✅ Stage 3 Complete: API Gateway"
+    else
+        echo "⚠️  Stage 3 script not yet implemented"
+    fi
+    echo ""
+}
+
 case "$STAGE" in
     0|stage0)
         run_stage0
@@ -73,6 +90,9 @@ case "$STAGE" in
         ;;
     2|stage2)
         run_stage2
+        ;;
+    3|stage3)
+        run_stage3
         ;;
     all)
         run_stage0
@@ -85,6 +105,12 @@ case "$STAGE" in
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 run_stage2
+
+                read -p "Stage 2 complete. Continue to Stage 3? (y/n) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    run_stage3
+                fi
             fi
         fi
         ;;
@@ -95,6 +121,7 @@ case "$STAGE" in
         echo "  0, stage0  - Foundation Setup (kind + GPU Operator)"
         echo "  1, stage1  - Core Infrastructure (PostgreSQL + Observability)"
         echo "  2, stage2  - Model Serving (vLLM + Infinity)"
+        echo "  3, stage3  - API Gateway"
         echo "  all        - Run all stages with confirmation prompts (default)"
         echo ""
         echo "Examples:"
@@ -111,7 +138,8 @@ echo "════════════════════════�
 echo ""
 echo "📊 Access Points:"
 echo "  Grafana:    http://localhost:30030 (admin/admin)"
-echo "  Prometheus: kubectl port-forward svc/prometheus-server 9090:80"
+echo "  Prometheus: http://localhost:30090"
+echo "  PostgreSQL: <WSL2_IP>:30432 (postgres/changeme-postgres-admin)"
 echo ""
 echo "🔍 Verify installation:"
 echo "  kubectl get pods --all-namespaces"

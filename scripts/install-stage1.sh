@@ -18,6 +18,10 @@ kubectl apply -f infra/k8s/postgresql-secret.yaml --validate=false
 
 echo ""
 echo "🗄️  Installing PostgreSQL + pgvector..."
+# Ensure repo is added
+helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+helm repo update bitnami
+
 helm upgrade --install postgresql bitnami/postgresql \
   --values infra/helm/private-ai/values-postgresql.yaml \
   --wait \
