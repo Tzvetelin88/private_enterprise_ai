@@ -29,6 +29,8 @@ spec:
         env:
         - name: VLLM_URL
           value: {{ .Values.config.vllmUrl | quote }}
+        - name: INFINITY_URL
+          value: {{ .Values.config.infinityUrl | quote }}
         - name: DEBUG
           value: {{ .Values.config.debug | quote }}
         - name: PORT

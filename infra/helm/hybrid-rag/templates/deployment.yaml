@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hybrid-rag.fullname" . }}
+  labels:
+    {{- include "hybrid-rag.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hybrid-rag.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hybrid-rag.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: hybrid-rag
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          value: {{ .Values.config.databaseUrl | quote }}
+        - name: ELASTICSEARCH_URL
+          value: {{ .Values.config.elasticsearchUrl | quote }}
+        - name: INFINITY_EMBEDDINGS_URL
+          value: {{ .Values.config.infinityEmbeddingsUrl | quote }}
+        - name: INFINITY_RERANKER_URL
+          value: {{ .Values.config.infinityRerankerUrl | quote }}
+        - name: LLM_URL
+          value: {{ .Values.config.llmUrl | quote }}
+        - name: LLM_MODEL
+          value: {{ .Values.config.llmModel | quote }}
+        - name: EMBEDDING_MODEL
+          value: {{ .Values.config.embeddingModel | quote }}
+        - name: RERANKER_MODEL
+          value: {{ .Values.config.rerankerModel | quote }}
+        - name: DEBUG
+          value: {{ .Values.config.debug | quote }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10

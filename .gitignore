@@ -27,6 +27,7 @@ wheels/
 .venv/
 venv/
 ENV/
+.dev/
 
 # IDE
 .vscode/
@@ -78,3 +79,4 @@ htmlcov/
 # Documentation builds
 docs/_build/
 site/
+

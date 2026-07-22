@@ -1,0 +1,75 @@
+version: "3.9"
+
+# Local dev stack for all three RAG pipelines.
+# Run with: docker compose -f rag/docker-compose.yml up -d
+# Requires Docker Desktop with at least 4 GB RAM allocated.
+
+services:
+
+  # ── Elasticsearch (BM25 for Hybrid RAG) ────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: rag-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── Neo4j (Graph RAG) ───────────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5.19-community
+    container_name: rag-neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/changeme-neo4j
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt protocol
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "changeme-neo4j", "RETURN 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  # ── Langfuse (self-hosted — Agentic RAG observability) ─────────────────────
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: rag-langfuse-db
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+      - POSTGRES_DB=langfuse
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: rag-langfuse
+    depends_on:
+      langfuse-db:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=changeme-langfuse-secret
+      - SALT=changeme-langfuse-salt
+      - TELEMETRY_ENABLED=false
+    ports:
+      - "3000:3000"
+
+volumes:
+  es-data:
+  neo4j-data:
+  langfuse-db-data:

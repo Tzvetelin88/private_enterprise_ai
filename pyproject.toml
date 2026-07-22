@@ -2,34 +2,23 @@
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# Root pyproject.toml — dev tooling config only.
+# Runtime dependencies live in each service's own pyproject.toml:
+#   apps/api-gateway/pyproject.toml
+#   rag/hybrid-rag/pyproject.toml
+#   rag/agentic-rag/pyproject.toml
+#   rag/graph-rag/pyproject.toml
+#   packages/shared-db/pyproject.toml
+#   packages/shared-schemas/pyproject.toml
+
 [project]
-name = "private-ai"
+name = "private-ai-dev"
 version = "0.1.0"
-description = "Private Enterprise AI Platform"
+description = "Private Enterprise AI Platform — dev tooling"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
-
-dependencies = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
-    "httpx>=0.26.0",
-    "python-multipart>=0.0.6",
-    "asyncpg>=0.29.0",
-    "sqlalchemy[asyncio]>=2.0.25",
-    "pgvector>=0.2.4",
-    "langchain>=0.1.0",
-    "langchain-community>=0.0.10",
-    "llama-index>=0.9.0",
-    "opentelemetry-api>=1.22.0",
-    "opentelemetry-sdk>=1.22.0",
-    "opentelemetry-instrumentation-fastapi>=0.43b0",
-    "prometheus-client>=0.19.0",
-    "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [

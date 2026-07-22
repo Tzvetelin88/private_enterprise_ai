@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "infinity-embeddings.fullname" . }}
+  labels:
+    {{- include "infinity-embeddings.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "infinity-embeddings.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "infinity-embeddings.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: infinity
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+          - v2
+          - --model-id
+          - {{ .Values.config.model | quote }}
+          - --port
+          - {{ .Values.config.port | quote }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.config.port }}
+          protocol: TCP
+        env:
+        - name: HF_HOME
+          value: {{ .Values.persistence.mountPath | quote }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          failureThreshold: {{ .Values.startupProbeFailureThreshold }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        {{- if .Values.persistence.enabled }}
+        volumeMounts:
+        - name: model-cache
+          mountPath: {{ .Values.persistence.mountPath }}
+        {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: {{ include "infinity-embeddings.fullname" . }}-cache
+      {{- end }}

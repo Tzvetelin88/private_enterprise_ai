@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentic-rag.fullname" . }}
+  labels:
+    {{- include "agentic-rag.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "agentic-rag.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agentic-rag.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: agentic-rag
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          value: {{ .Values.config.databaseUrl | quote }}
+        - name: HYBRID_RAG_URL
+          value: {{ .Values.config.hybridRagUrl | quote }}
+        - name: LLM_URL
+          value: {{ .Values.config.llmUrl | quote }}
+        - name: LLM_MODEL
+          value: {{ .Values.config.llmModel | quote }}
+        - name: MAX_ITERATIONS
+          value: {{ .Values.config.maxIterations | quote }}
+        - name: TRACING_BACKEND
+          value: {{ .Values.config.tracingBackend | quote }}
+        - name: LANGFUSE_HOST
+          value: {{ .Values.config.langfuseHost | quote }}
+        - name: LANGFUSE_PUBLIC_KEY
+          value: {{ .Values.config.langfusePublicKey | quote }}
+        - name: LANGFUSE_SECRET_KEY
+          value: {{ .Values.config.langfuseSecretKey | quote }}
+        - name: DEBUG
+          value: {{ .Values.config.debug | quote }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10

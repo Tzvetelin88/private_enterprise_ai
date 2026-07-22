@@ -11,8 +11,9 @@ service:
   nodePort: 30880
 
 config:
-  vllmUrl: "http://host.docker.internal:8000"  # For WSL2 development
-  # vllmUrl: "http://vllm:8000"  # For production in-cluster
+  vllmUrl: "http://host.docker.internal:11434"  # Ollama (Mac) — change to http://vllm:8000 for NVIDIA in-cluster
+  # vllmUrl: "http://host.docker.internal:8000"  # vLLM external (NVIDIA/WSL2)
+  infinityUrl: "http://infinity-embeddings:7997"  # ClusterIP — same for all platforms
   debug: false
 
 resources:

@@ -1,0 +1,32 @@
+replicaCount: 1
+
+image:
+  repository: michaelf34/infinity
+  tag: "0.0.61"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 7997
+
+config:
+  model: "BAAI/bge-small-en-v1.5"
+  port: 7997
+  # device: cpu  — default; change to "cuda" for NVIDIA GPU nodes
+
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 10Gi
+  mountPath: /app/.cache
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "4Gi"
+    cpu: "2000m"
+
+# Increase if model download times out on slow connections
+startupProbeFailureThreshold: 60

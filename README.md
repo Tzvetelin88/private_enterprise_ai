@@ -8,7 +8,7 @@ Open-source platform for deploying private AI infrastructure with local LLMs, RA
 - **RAG Pipelines**: Document ingestion, embedding generation, and semantic search
 - **AI Agents**: Multi-step reasoning with tool integration via MCP protocol
 - **Multi-tenancy**: Secure tenant isolation with RBAC and authentication
-- **GPU Management**: Efficient GPU sharing and scheduling with NVIDIA GPU Operator
+- **GPU Management**: NVIDIA GPU Operator (Linux) or Apple Metal via Ollama (Mac)
 - **OpenAI-Compatible API**: Drop-in replacement for OpenAI API
 - **Enterprise Observability**: Prometheus, Grafana, Loki, Tempo integration
 - **Kubernetes-Native**: Production-ready deployment on any K8s cluster
@@ -17,97 +17,203 @@ Open-source platform for deploying private AI infrastructure with local LLMs, RA
 
 ### Prerequisites
 
-- Docker Desktop or Docker Engine
-- kubectl CLI
-- Helm 3.x
-- kind (Kubernetes IN Docker)
-- NVIDIA GPU with drivers (for GPU acceleration)
-- 16GB+ RAM recommended
-- 50GB+ free disk space
+- Docker Desktop (Mac) or Docker Engine (Linux)
+- `kubectl`, `helm`, `kind` CLIs
 
-### Installation
-
-**Option 1: Deploy All Stages (Recommended)**
 ```bash
-# Interactive deployment with confirmation prompts
-make deploy-all
+# Mac — install all prerequisites
+brew install kind kubectl helm
+# Docker Desktop: https://www.docker.com/products/docker-desktop/
 ```
 
-**Option 2: Deploy Stage by Stage**
+> **RAM / Disk**: 16 GB+ RAM and 50 GB+ free disk recommended.
+
+---
+
+## 🍎 Mac / Apple Silicon (M-series) — Default Path
+
+Mac M-series chips use **Apple Metal** for GPU acceleration (no NVIDIA/CUDA required).  
+The model server runs **outside** the kind cluster via [Ollama](https://ollama.com/).  
+All other services (PostgreSQL, Prometheus, Grafana, API Gateway) deploy inside kind normally.
+
+### Stage 0 — Create kind cluster (Mac)
+
 ```bash
-# Stage 0: Foundation (kind cluster + GPU Operator)
-make deploy-stage0
-
-# Stage 1: Core Infrastructure (PostgreSQL + Observability)
-make deploy-stage1
-
-# Stage 2: Model Inference Runtime
-# Note: For WSL2, run vLLM externally (see below)
-make deploy-stage2  # For production/bare-metal with GPU
-
-# Stage 3: API Gateway
-make deploy-stage3
+cd infra/kind && bash setup-kind.sh
+# or: make kind-up
 ```
 
-**Option 3: Manual Deployment**
-```bash
-# Stage 0
-cd infra/kind && bash setup-kind-gpu.sh
-cd infra/k8s && bash install-gpu-operator.sh
-bash scripts/verify-gpu.sh
+### Stage 1 — Core Infrastructure
 
-# Stage 1
+```bash
 bash scripts/install-stage1.sh
+# or: make deploy-stage1
 ```
 
-**Access Services After Installation:**
+### Stage 2 — Model Server (Ollama, Metal-accelerated)
+
+Run **in a separate terminal** — Ollama stays running in the background.
+
 ```bash
-# Grafana (monitoring dashboards)
-http://localhost:30030
-Username: admin
-Password: admin
+bash scripts/run-ollama-local.sh
+# or: make model-server
+```
 
-# Prometheus (metrics)
-http://localhost:30090
+This installs Ollama (if needed), starts the service, and pulls `llama3.2:3b`.  
+The API is OpenAI-compatible at `http://localhost:11434`.
 
-# PostgreSQL (external access)
-Host: <WSL2_IP>
-Port: 30432
-Username: postgres
-Password: changeme-postgres-admin
+### Stage 3 — API Gateway
 
-# Verify deployment
+```bash
+bash scripts/install-stage3.sh
+# or: make deploy-stage3
+```
+
+### Stage 4 — Embedding Service (Infinity)
+
+```bash
+bash scripts/install-stage4.sh
+# or: make deploy-stage4
+```
+
+Deploys [Infinity](https://github.com/michaelfeil/infinity) with `BAAI/bge-small-en-v1.5` (384-dim) into the cluster.  
+No platform differences — runs CPU-only on both Mac and NVIDIA nodes.  
+First run downloads ~200 MB model; subsequent starts use the cached PVC.
+
+### Deploy All Stages at Once (Mac)
+
+```bash
+make deploy-all
+# or: bash scripts/install-all.sh all
+```
+
+### Verify (Mac)
+
+```bash
+curl http://localhost:30880/health          # API Gateway
+curl http://localhost:11434/v1/models       # Ollama model list
+bash scripts/verify-gpu.sh                 # Apple Silicon + Ollama status
+```
+
+---
+
+## 🟢 NVIDIA GPU (Linux / WSL2) — GPU Path
+
+Use this path on **Linux** with a CUDA-capable NVIDIA GPU (tested: RTX 4060, A100/H100).  
+vLLM runs **inside** the kind cluster with full GPU access via the NVIDIA GPU Operator.
+
+> **WSL2 note**: GPU passthrough into kind is not supported in WSL2.  
+> On WSL2, run `GPU_MODE=nvidia bash scripts/install-stage2.sh` which deploys vLLM as an external process instead of in-cluster.
+
+### Stage 0 — Create kind cluster (NVIDIA)
+
+```bash
+cd infra/kind && bash setup-kind-gpu.sh
+# then:
+cd infra/k8s && bash install-gpu-operator.sh
+# or: make kind-up-nvidia
+```
+
+### Stage 1 — Core Infrastructure
+
+```bash
+bash scripts/install-stage1.sh
+# or: make deploy-stage1
+```
+
+### Stage 2 — Model Server (vLLM, NVIDIA in-cluster)
+
+```bash
+GPU_MODE=nvidia bash scripts/install-stage2.sh
+# or: make deploy-stage2-nvidia
+```
+
+### Stage 3 — API Gateway
+
+```bash
+bash scripts/install-stage3.sh
+# or: make deploy-stage3
+```
+
+### Stage 4 — Embedding Service (Infinity)
+
+```bash
+bash scripts/install-stage4.sh
+# or: make deploy-stage4
+```
+
+### Deploy All Stages at Once (NVIDIA)
+
+```bash
+make deploy-all-nvidia
+# or: GPU_MODE=nvidia bash scripts/install-all.sh all
+```
+
+### Verify (NVIDIA)
+
+```bash
+curl http://localhost:30880/health          # API Gateway
+curl http://localhost:30800/v1/models       # vLLM model list
+bash scripts/verify-gpu.sh                 # NVIDIA K8s GPU check (Linux auto-detected)
+```
+
+---
+
+## Access Points
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| API Gateway | http://localhost:30880 | — |
+| Grafana | http://localhost:30030 | admin / admin |
+| Prometheus | http://localhost:30090 | — |
+| PostgreSQL | localhost:30432 | postgres / changeme-postgres-admin |
+| Ollama API (Mac) | http://localhost:11434 | — |
+| vLLM API (NVIDIA) | http://localhost:30800 | — |
+| Infinity Embeddings | cluster-internal only | — |
+
+```bash
+# Full status check
 kubectl get pods --all-namespaces
+kubectl get svc --all-namespaces
 ```
 
-**Stage 2: Running vLLM Locally (WSL2)**
-```bash
-# Install vLLM
-pip install vllm
+---
 
-# Start vLLM server (downloads model on first run)
-bash scripts/run-vllm-local.sh
+## Script Reference
 
-# Test endpoints
-curl http://localhost:8000/health
-curl http://localhost:8000/v1/models
-```
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `infra/kind/setup-kind.sh` | Mac | Create kind cluster (no GPU mounts) |
+| `infra/kind/setup-kind-gpu.sh` | Linux/NVIDIA | Create kind cluster with NVIDIA device mounts |
+| `scripts/install-stage1.sh` | Both | Deploy PostgreSQL + Prometheus + Grafana |
+| `scripts/install-stage2.sh` | Both | Model server: Ollama (mac) or vLLM (GPU_MODE=nvidia) |
+| `scripts/install-stage3.sh` | Both | Deploy API Gateway |
+| `scripts/install-stage4.sh` | Both | Deploy Infinity Embeddings Service |
+| `scripts/install-stage5-hybrid.sh` | Both | Deploy Hybrid RAG service (Elasticsearch + reranker) |
+| `scripts/install-stage5-agentic.sh` | Both | Deploy Agentic RAG service (LangGraph) |
+| `scripts/install-stage5-graph.sh` | Both | Deploy Graph RAG service (Neo4j) |
+| `scripts/run-ollama-local.sh` | Mac | Start Ollama service + pull model |
+| `scripts/run-vllm-local.sh` | Linux/NVIDIA | Start vLLM server (CUDA required) |
+| `scripts/verify-gpu.sh` | Both | Platform-aware compute check |
+| `scripts/install-all.sh` | Both | Orchestrate all stages (respects GPU_MODE) |
+
+---
 
 ## Project Status
 
-**Current Stage**: Stage 3 - API Gateway
-**Status**: Complete
-**Last Updated**: 2026-06-08
+**Current Stage**: Stage 5 — RAG Services (Hybrid, Agentic, Graph)  
+**Status**: Complete  
+**Last Updated**: 2026-07-22
 
 **Completed Stages:**
-- ✅ Stage 0: Foundation Setup (kind cluster + GPU Operator)
+- ✅ Stage 0: Foundation Setup (kind cluster)
 - ✅ Stage 1: Core Infrastructure (PostgreSQL + Prometheus + Grafana)
-- ✅ Stage 2: Model Inference Runtime (vLLM - external for WSL2/GPU)
+- ✅ Stage 2: Model Inference Runtime (Ollama on Mac / vLLM on NVIDIA)
 - ✅ Stage 3: API Gateway (FastAPI with OpenAI-compatible endpoints)
+- ✅ Stage 4: Embedding Service (Infinity + BAAI/bge-small-en-v1.5, 384-dim)
+- ✅ Stage 5: RAG Services (Hybrid Search + Agentic LangGraph + Graph Neo4j)
 
-**Next:** Stage 4 - Embedding Service
-
-**Note**: Due to WSL2 + kind GPU passthrough limitations, vLLM runs outside Kubernetes during development. Production deployments on bare metal/cloud work as designed.
+**Next:** Stage 6 — RAG Evaluation & Observability (RAGAS metrics, Langfuse dashboards)
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed stage-by-stage roadmap.
 
@@ -168,17 +274,21 @@ graph TB
 
 ### Current Implementation Status
 
-**Completed (Stages 0-3)**:
+**Completed (Stages 0-5)**:
 - ✅ Kubernetes cluster (kind)
 - ✅ PostgreSQL + pgvector
 - ✅ Prometheus & Grafana
-- ✅ API Gateway
+- ✅ API Gateway (router-split, per-domain clients)
+- ✅ Infinity Embeddings (BAAI/bge-small-en-v1.5, 384-dim)
+- ✅ Infinity Reranker (BAAI/bge-reranker-v2-m3, separate pod)
+- ✅ Hybrid RAG (pgvector + Elasticsearch BM25 + RRF + cross-encoder)
+- ✅ Agentic RAG (LangGraph self-correcting, Langfuse tracing)
+- ✅ Graph RAG (Neo4j knowledge graph + entity extraction + hybrid traversal)
 
-**Pending (Stages 4+)**:
-- ⏳ vLLM (external - WSL2 limitation)
-- ⏳ Infinity embeddings
-- ⏳ RAG Service
-- ⏳ Agent Service
+**Pending (Stages 6+)**:
+- ⏳ Auth & Multi-tenancy (Stage 7 — Keycloak, JWT)
+- ⏳ Model Registry (Stage 8 — Harbor)
+- ⏳ Agent Platform (Stages 10-11 — MCP, LangChain agents)
 
 Full architecture details in `docs/architecture/`.
 

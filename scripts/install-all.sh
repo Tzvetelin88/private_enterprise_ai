@@ -1,32 +1,54 @@
 #!/bin/bash
+# Private Enterprise AI Platform — Full Installation Orchestrator
+#
+# Environment variables:
+#   GPU_MODE   mac (default) | nvidia
+#              mac   → Stage 0 uses setup-kind.sh, Stage 2 uses Ollama
+#              nvidia → Stage 0 uses setup-kind-gpu.sh + GPU Operator, Stage 2 uses vLLM in cluster
+#
+# Usage:
+#   bash scripts/install-all.sh            # Run all stages (Mac default)
+#   bash scripts/install-all.sh 0          # Run only Stage 0
+#   GPU_MODE=nvidia bash scripts/install-all.sh   # All stages, NVIDIA GPU mode
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GPU_MODE="${GPU_MODE:-mac}"
 
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║     Private Enterprise AI Platform - Full Installation         ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
+echo "  GPU mode: $GPU_MODE"
 echo ""
 
 STAGE=${1:-all}
 
 function run_stage0() {
     echo "═══════════════════════════════════════════════════════════════"
-    echo "  STAGE 0: Foundation Setup"
+    echo "  STAGE 0: Foundation Setup  [GPU_MODE=$GPU_MODE]"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
 
-    cd "$PROJECT_ROOT/infra/kind"
-    bash setup-kind-gpu.sh
+    if [[ "$GPU_MODE" == "nvidia" ]]; then
+        cd "$PROJECT_ROOT/infra/kind"
+        bash setup-kind-gpu.sh
 
-    echo ""
-    cd "$PROJECT_ROOT/infra/k8s"
-    bash install-gpu-operator.sh
+        echo ""
+        cd "$PROJECT_ROOT/infra/k8s"
+        bash install-gpu-operator.sh
 
-    echo ""
-    cd "$PROJECT_ROOT"
-    bash scripts/verify-gpu.sh
+        echo ""
+        cd "$PROJECT_ROOT"
+        bash scripts/verify-gpu.sh
+    else
+        cd "$PROJECT_ROOT/infra/kind"
+        bash setup-kind.sh
+
+        echo ""
+        cd "$PROJECT_ROOT"
+        bash scripts/verify-gpu.sh
+    fi
 
     echo ""
     echo "✅ Stage 0 Complete: Foundation Setup"
@@ -49,18 +71,14 @@ function run_stage1() {
 
 function run_stage2() {
     echo "═══════════════════════════════════════════════════════════════"
-    echo "  STAGE 2: Model Serving (vLLM + Infinity)"
+    echo "  STAGE 2: Model Inference Runtime  [GPU_MODE=$GPU_MODE]"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
 
     cd "$PROJECT_ROOT"
-    if [ -f scripts/install-stage2.sh ]; then
-        bash scripts/install-stage2.sh
-        echo ""
-        echo "✅ Stage 2 Complete: Model Serving"
-    else
-        echo "⚠️  Stage 2 script not yet implemented"
-    fi
+    GPU_MODE="$GPU_MODE" bash scripts/install-stage2.sh
+    echo ""
+    echo "✅ Stage 2 Complete: Model Inference Runtime"
     echo ""
 }
 
@@ -115,19 +133,20 @@ case "$STAGE" in
         fi
         ;;
     *)
-        echo "Usage: $0 [stage]"
+        echo "Usage: GPU_MODE=[mac|nvidia] $0 [stage]"
         echo ""
         echo "Stages:"
-        echo "  0, stage0  - Foundation Setup (kind + GPU Operator)"
+        echo "  0, stage0  - Foundation Setup (kind cluster)"
         echo "  1, stage1  - Core Infrastructure (PostgreSQL + Observability)"
-        echo "  2, stage2  - Model Serving (vLLM + Infinity)"
+        echo "  2, stage2  - Model Inference Runtime (Ollama or vLLM)"
         echo "  3, stage3  - API Gateway"
         echo "  all        - Run all stages with confirmation prompts (default)"
         echo ""
         echo "Examples:"
-        echo "  $0           # Run all stages interactively"
-        echo "  $0 0         # Run only Stage 0"
-        echo "  $0 stage1    # Run only Stage 1"
+        echo "  $0                                # Mac: all stages"
+        echo "  $0 0                              # Mac: Stage 0 only"
+        echo "  GPU_MODE=nvidia $0                # NVIDIA: all stages"
+        echo "  GPU_MODE=nvidia $0 2              # NVIDIA: Stage 2 only"
         exit 1
         ;;
 esac
@@ -137,11 +156,17 @@ echo "  Installation Complete!"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "📊 Access Points:"
-echo "  Grafana:    http://localhost:30030 (admin/admin)"
+echo "  Grafana:    http://localhost:30030  (admin / admin)"
 echo "  Prometheus: http://localhost:30090"
-echo "  PostgreSQL: <WSL2_IP>:30432 (postgres/changeme-postgres-admin)"
+echo "  PostgreSQL: localhost:30432  (postgres / changeme-postgres-admin)"
+echo "  API Gateway: http://localhost:30880"
+if [[ "$GPU_MODE" == "nvidia" ]]; then
+echo "  vLLM API:   http://localhost:30800"
+else
+echo "  Ollama API: http://localhost:11434"
+fi
 echo ""
-echo "🔍 Verify installation:"
+echo "🔍 Verify:"
 echo "  kubectl get pods --all-namespaces"
 echo "  kubectl get nodes -o wide"
 echo ""

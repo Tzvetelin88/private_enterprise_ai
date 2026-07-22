@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: graph-rag
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8003
+
+config:
+  databaseUrl: "postgresql://postgres:changeme-postgres-admin@postgres:5432/private_ai"
+  neo4jUri: "bolt://neo4j:7687"
+  neo4jUser: "neo4j"
+  neo4jPassword: "changeme-neo4j"
+  infinityEmbeddingsUrl: "http://infinity-embeddings:7997"
+  embeddingModel: "BAAI/bge-small-en-v1.5"
+  llmUrl: "http://host.docker.internal:11434"
+  llmModel: "llama3.2:3b"
+  traversalDepth: 2
+  debug: false
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"

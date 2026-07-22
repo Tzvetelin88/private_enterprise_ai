@@ -1,0 +1,6 @@
+apiVersion: v2
+name: infinity-reranker
+description: Infinity Reranker Server for Private Enterprise AI Platform (cross-encoder model)
+type: application
+version: 0.1.0
+appVersion: "0.0.61"

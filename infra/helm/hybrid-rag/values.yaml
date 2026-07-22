@@ -1,0 +1,29 @@
+replicaCount: 1
+
+image:
+  repository: hybrid-rag
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8001
+
+config:
+  databaseUrl: "postgresql://postgres:changeme-postgres-admin@postgres:5432/private_ai"
+  elasticsearchUrl: "http://elasticsearch:9200"
+  infinityEmbeddingsUrl: "http://infinity-embeddings:7997"
+  infinityRerankerUrl: "http://infinity-reranker:7998"
+  llmUrl: "http://host.docker.internal:11434"  # Ollama (Mac) or change to in-cluster vLLM
+  llmModel: "llama3.2:3b"
+  embeddingModel: "BAAI/bge-small-en-v1.5"
+  rerankerModel: "BAAI/bge-reranker-v2-m3"
+  debug: false
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
