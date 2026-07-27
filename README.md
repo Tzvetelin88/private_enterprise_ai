@@ -202,22 +202,6 @@ kubectl get svc --all-namespaces
 
 ---
 
-## Project Status
-
-**Last Updated**: 2026-07-27
-
-| Stage | Name | Status |
-|-------|------|--------|
-| 0 | Foundation Setup (kind cluster) | ✅ Done |
-| 1 | Core Infrastructure (PostgreSQL, Prometheus, Grafana) | ✅ Done |
-| 2 | Model Inference Runtime (Ollama / vLLM) | ✅ Done |
-| 3 | API Gateway (FastAPI, OpenAI-compatible) | ✅ Done |
-| 4 | Embedding Service (Infinity, BGE-Small 384-dim) | ✅ Done |
-| 5 | RAG Services (Hybrid + Agentic + Graph) | ✅ Done |
-| 6 | MCP Subsystem (Hub + Server + Client) | ✅ Done |
-
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed stage-by-stage roadmap.
-
 ## Architecture
 
 ![Private Enterprise AI Platform — Architecture](private_enterprise_ai_architecture_v1.svg)
@@ -261,8 +245,19 @@ Full architecture details in `rag/ARCHITECTURE.md` and `mcp/ARCHITECTURE.md`.
 **Infrastructure**: Kubernetes (kind), Helm, Docker  
 **AI Runtime**: Ollama (Mac/Metal), vLLM (NVIDIA/CUDA), Infinity Embeddings + Reranker  
 **Backend**: Python 3.11, FastAPI, asyncpg, httpx, LangChain, LangGraph  
-**Storage**: PostgreSQL + pgvector (vectors), Elasticsearch (BM25), Neo4j (knowledge graph)  
-**Observability**: Prometheus, Grafana, Langfuse (agent traces)
+**Storage**: PostgreSQL + pgvector (vectors + LangGraph checkpoints), Elasticsearch (BM25), Neo4j (knowledge graph), Redis (LLM response cache)  
+**Observability**: Prometheus, Grafana, Langfuse (agent traces with per-node spans + `trace_url` in responses)
+
+### Agentic RAG Production Patterns
+
+| Pattern | Technology | What It Provides |
+|---------|-----------|-----------------|
+| **Structured Output Parsing** | LangChain — `GradeResult` Pydantic model | Grade is always `"relevant"` or `"irrelevant"` — never freeform LLM text |
+| **LLM Fallback Chain** | LangChain — connection-error fallback | Primary LLM unreachable → transparent retry with `fallback_llm_model` |
+| **LLM Response Cache** | Redis + LangChain global cache | Identical prompts served from Redis in <50 ms; zero node code changes |
+| **Workflow Checkpointing** | LangGraph `AsyncPostgresSaver` | Workflow state persists to PostgreSQL; survives service restarts |
+| **Human-in-the-Loop (HITL)** | LangGraph `interrupt_before=["generate"]` | Pause before generate for human approval via `POST /query/approve` |
+| **Visual Tracing** | Langfuse callbacks + `trace_url` in response | Every query produces a clickable Langfuse trace at `http://localhost:3000` |
 
 ## Project Structure
 
