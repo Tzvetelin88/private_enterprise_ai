@@ -172,6 +172,7 @@ bash scripts/verify-gpu.sh                 # NVIDIA K8s GPU check (Linux auto-de
 | Ollama API | http://localhost:11434 | — |
 | vLLM API | http://localhost:30800 | — |
 | Infinity Embeddings | cluster-internal only | — |
+| Langfuse (LLM traces) | http://localhost:3000 | created on first login |
 
 ```bash
 # Full status check
@@ -250,6 +251,10 @@ Full architecture details in `rag/ARCHITECTURE.md` and `mcp/ARCHITECTURE.md`.
 - **[MCP Subsystem](mcp/README.md)** — Tool catalog API, built-in tools, external server registration
 - **[MCP Architecture](mcp/ARCHITECTURE.md)** — Routing logic, wire protocol, DB schema
 - **[Technology Stack](docs/tech/)** — Reference docs for all technologies used
+- **[Langfuse Observability](docs/observability/langfuse-guide.md)** — How to read LLM traces, screenshots of the UI, demo script
+
+![Observability](docs/observability/images/trace_details_relevant.png)
+
 
 ## Technology Stack
 

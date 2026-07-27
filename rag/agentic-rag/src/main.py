@@ -13,6 +13,7 @@ from shared.ingestion.chunker import chunk_text
 
 from .config import settings
 from .workflow import compiled_graph
+from . import tracing
 
 logging.basicConfig(
     level=logging.INFO if not settings.debug else logging.DEBUG,
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"LangGraph max_iterations={settings.max_iterations}")
     logger.info(f"Tracing backend: {settings.tracing_backend}")
+    # Eagerly initialise Langfuse so key errors surface at startup
+    tracing.get_client()
     yield
     logger.info("Shutdown complete")
 
@@ -72,6 +75,12 @@ async def upload(file: UploadFile = File(...)):
 @app.post("/query")
 async def query(request: QueryRequest):
     """Run the agentic self-correcting RAG pipeline."""
+    lf_trace = tracing.start_trace(
+        name="agentic-rag-query",
+        input={"query": request.query, "top_k": request.top_k},
+        metadata={"service": "agentic-rag"},
+    )
+
     initial_state = {
         "question": request.query,
         "documents": [],
@@ -80,13 +89,24 @@ async def query(request: QueryRequest):
         "grade": "",
         "query_rewrites": [],
         "trace_url": "",
+        "lf_trace": lf_trace,
     }
 
     try:
         final_state = await compiled_graph.ainvoke(initial_state)
     except Exception as e:
         logger.error(f"Graph execution failed: {e}")
+        tracing.end_trace(lf_trace, output={"error": str(e)})
         raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")
+
+    tracing.end_trace(
+        lf_trace,
+        output={
+            "answer": final_state.get("generation", ""),
+            "iterations": final_state.get("iterations", 0),
+            "final_grade": final_state.get("grade", ""),
+        },
+    )
 
     sources = [
         {

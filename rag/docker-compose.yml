@@ -44,8 +44,8 @@ services:
       - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
       - LLM_URL=http://host.docker.internal:11434
       - LANGFUSE_HOST=http://langfuse:3000
-      - LANGFUSE_PUBLIC_KEY=
-      - LANGFUSE_SECRET_KEY=
+      - LANGFUSE_PUBLIC_KEY=pk-lf-...
+      - LANGFUSE_SECRET_KEY=sk-lf-...
     depends_on:
       langfuse:
         condition: service_started

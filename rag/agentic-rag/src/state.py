@@ -1,7 +1,7 @@
 """GraphState TypedDict for the LangGraph agentic RAG workflow."""
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
 
 class GraphState(TypedDict):
@@ -12,3 +12,5 @@ class GraphState(TypedDict):
     grade: str  # "relevant" | "irrelevant"
     query_rewrites: list[str]
     trace_url: str
+    # Langfuse trace object threaded through the graph (not serialised)
+    lf_trace: Optional[Any]
