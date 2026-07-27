@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -11,7 +10,6 @@ from typing import Any
 import asyncpg
 import httpx
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from shared.ingestion.parsers import parse
 from shared.ingestion.chunker import chunk_text
 from shared.embeddings.client import embed
@@ -39,7 +37,8 @@ async def ingest_document(
 
     async with pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO documents (id, name, content_type, status, rag_type) VALUES ($1, $2, $3, 'pending', 'graph')",
+            "INSERT INTO documents (id, tenant_id, filename, content_type, status) "
+            "VALUES ($1, (SELECT id FROM tenants WHERE name='default'), $2, $3, 'pending')",
             uuid.UUID(doc_id), filename, content_type,
         )
 
@@ -57,8 +56,9 @@ async def ingest_document(
         async with pool.acquire() as conn:
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 await conn.execute(
-                    "INSERT INTO chunks (id, document_id, content, chunk_index, embedding) VALUES ($1, $2, $3, $4, $5::vector)",
-                    uuid.UUID(str(uuid.uuid4())), uuid.UUID(doc_id), chunk.content, i, embedding,
+                    "INSERT INTO chunks (id, document_id, tenant_id, content, chunk_index, embedding) "
+                    "VALUES ($1, $2, (SELECT id FROM tenants WHERE name='default'), $3, $4, $5::vector)",
+                    uuid.UUID(str(uuid.uuid4())), uuid.UUID(doc_id), chunk.content, i, str(embedding),
                 )
 
         # Entity/relationship extraction
@@ -107,13 +107,13 @@ async def query_pipeline(
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT c.content, d.name AS document_name, d.id::text AS document_id,
+            SELECT c.content, d.filename AS document_name, d.id::text AS document_id,
                    1 - (c.embedding <=> $1::vector) AS score
             FROM chunks c JOIN documents d ON d.id = c.document_id
             WHERE d.status = 'indexed'
             ORDER BY c.embedding <=> $1::vector LIMIT $2
             """,
-            query_embedding, top_k,
+            str(query_embedding), top_k,
         )
     docs = [dict(r) for r in rows]
 

@@ -6,10 +6,89 @@ version: "3.9"
 
 services:
 
+  # ── RAG application services ────────────────────────────────────────────────
+  hybrid-rag:
+    build:
+      context: .
+      dockerfile: hybrid-rag/Dockerfile
+    image: hybrid-rag:latest
+    container_name: rag-hybrid
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
+      - LLM_URL=http://host.docker.internal:11434
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  agentic-rag:
+    build:
+      context: .
+      dockerfile: agentic-rag/Dockerfile
+    image: agentic-rag:latest
+    container_name: rag-agentic
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable
+      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
+      - LLM_URL=http://host.docker.internal:11434
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_KEY=
+      - LANGFUSE_SECRET_KEY=
+    depends_on:
+      langfuse:
+        condition: service_started
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8002/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  graph-rag:
+    build:
+      context: .
+      dockerfile: graph-rag/Dockerfile
+    image: graph-rag:latest
+    container_name: rag-graph
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable
+      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
+      - LLM_URL=http://host.docker.internal:11434
+      - NEO4J_URL=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=changeme-neo4j
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8003/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   # ── Elasticsearch (BM25 for Hybrid RAG) ────────────────────────────────────
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: rag-elasticsearch
+    networks:
+      - rag-net
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -28,6 +107,8 @@ services:
   neo4j:
     image: neo4j:5.19-community
     container_name: rag-neo4j
+    networks:
+      - rag-net
     environment:
       - NEO4J_AUTH=neo4j/changeme-neo4j
       - NEO4J_PLUGINS=["apoc"]
@@ -47,6 +128,8 @@ services:
   langfuse-db:
     image: postgres:16-alpine
     container_name: rag-langfuse-db
+    networks:
+      - rag-net
     environment:
       - POSTGRES_USER=langfuse
       - POSTGRES_PASSWORD=langfuse
@@ -55,8 +138,10 @@ services:
       - langfuse-db-data:/var/lib/postgresql/data
 
   langfuse:
-    image: langfuse/langfuse:latest
+    image: langfuse/langfuse:2
     container_name: rag-langfuse
+    networks:
+      - rag-net
     depends_on:
       langfuse-db:
         condition: service_started
@@ -73,3 +158,7 @@ volumes:
   es-data:
   neo4j-data:
   langfuse-db-data:
+
+networks:
+  rag-net:
+    driver: bridge

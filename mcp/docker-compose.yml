@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  mcp-hub:
+    build:
+      context: .
+      dockerfile: mcp-hub/Dockerfile
+    image: mcp-hub:latest
+    ports:
+      - "8010:8010"
+    environment:
+      DATABASE_URL: "postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable"
+      MCP_SERVER_URL: "http://mcp-server:8011"
+      MCP_CLIENT_URL: "http://mcp-client:8012"
+    networks:
+      - mcp-net
+      - rag-net
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp-server/Dockerfile
+    image: mcp-server:latest
+    ports:
+      - "8011:8011"
+    environment:
+      HYBRID_RAG_URL: "http://hybrid-rag:8001"
+      AGENTIC_RAG_URL: "http://agentic-rag:8002"
+      GRAPH_RAG_URL: "http://graph-rag:8003"
+      LLM_URL: "http://host.docker.internal:11434"
+      INFINITY_EMBEDDINGS_URL: "http://host.docker.internal:7997"
+      MCP_HUB_URL: "http://mcp-hub:8010"
+    depends_on:
+      - mcp-hub
+    networks:
+      - mcp-net
+      - rag-net
+
+  mcp-client:
+    build:
+      context: .
+      dockerfile: mcp-client/Dockerfile
+    image: mcp-client:latest
+    ports:
+      - "8012:8012"
+    networks:
+      - mcp-net
+
+networks:
+  mcp-net:
+    driver: bridge
+  rag-net:
+    external: true
+    name: rag_rag-net

@@ -3,16 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
-from pathlib import Path
 from typing import Any
 
 import asyncpg
 import httpx
 from elasticsearch import AsyncElasticsearch
 
-# Allow importing from rag/shared/ regardless of working directory
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from shared.reranking.reranker import rerank
 
 logger = logging.getLogger(__name__)
@@ -33,7 +29,7 @@ async def dense_search(
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT c.id::text, c.content, d.name AS document_name, d.id::text AS document_id,
+            SELECT c.id::text, c.content, d.filename AS document_name, d.id::text AS document_id,
                    1 - (c.embedding <=> $1::vector) AS score
             FROM chunks c
             JOIN documents d ON d.id = c.document_id
@@ -41,7 +37,7 @@ async def dense_search(
             ORDER BY c.embedding <=> $1::vector
             LIMIT $2
             """,
-            embedding,
+            str(embedding),
             top_k,
         )
     return [dict(r) for r in rows]

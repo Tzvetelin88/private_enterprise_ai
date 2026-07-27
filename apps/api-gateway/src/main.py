@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
 from src.config import settings
-from src.clients import llm, embeddings, rag
-from src.routers import models, chat, completions, embeddings as embeddings_router, rag as rag_router
+from src.clients import llm, embeddings, rag, mcp
+from src.routers import models, chat, completions, embeddings as embeddings_router, rag as rag_router, mcp as mcp_router
 
 logging.basicConfig(
     level=logging.INFO if not settings.debug else logging.DEBUG,
@@ -22,10 +22,12 @@ async def lifespan(app: FastAPI):
     await llm.startup()
     await embeddings.startup()
     await rag.startup()
+    await mcp.startup()
     yield
     await llm.shutdown()
     await embeddings.shutdown()
     await rag.shutdown()
+    await mcp.shutdown()
     logger.info("Shutdown complete")
 
 
@@ -40,6 +42,7 @@ app.include_router(chat.router)
 app.include_router(completions.router)
 app.include_router(embeddings_router.router)
 app.include_router(rag_router.router)
+app.include_router(mcp_router.router)
 
 
 @app.get("/health")

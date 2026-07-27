@@ -3,14 +3,11 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from shared.ingestion.parsers import parse
 from shared.ingestion.chunker import chunk_text
 

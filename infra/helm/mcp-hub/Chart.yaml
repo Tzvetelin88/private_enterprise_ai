@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mcp-hub
+description: MCP Hub — tool catalog, routing, and audit log service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

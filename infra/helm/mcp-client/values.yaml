@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: mcp-client
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8012
+
+config:
+  requestTimeout: 60
+  debug: false
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "512Mi"
+    cpu: "250m"

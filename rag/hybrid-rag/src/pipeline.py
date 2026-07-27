@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -12,7 +11,6 @@ import asyncpg
 import httpx
 from elasticsearch import AsyncElasticsearch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from shared.ingestion.parsers import parse
 from shared.ingestion.chunker import chunk_text
 from shared.embeddings.client import embed
@@ -32,14 +30,15 @@ async def ingest_document(
     embedding_model: str,
     chunk_size: int = 512,
     chunk_overlap: int = 64,
-) -> str:
-    """Parse, chunk, embed, and store a document. Returns document_id."""
+) -> dict:
+    """Parse, chunk, embed, and store a document. Returns {document_id, document_name, chunks_created}."""
     doc_id = str(uuid.uuid4())
     content_type = Path(filename).suffix.lstrip(".") or "txt"
 
     async with pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO documents (id, name, content_type, status, rag_type) VALUES ($1, $2, $3, 'pending', 'hybrid')",
+            "INSERT INTO documents (id, tenant_id, filename, content_type, status) "
+            "VALUES ($1, (SELECT id FROM tenants WHERE name='default'), $2, $3, 'pending')",
             uuid.UUID(doc_id), filename, content_type,
         )
 
@@ -58,8 +57,9 @@ async def ingest_document(
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 chunk_id = str(uuid.uuid4())
                 await conn.execute(
-                    "INSERT INTO chunks (id, document_id, content, chunk_index, embedding) VALUES ($1, $2, $3, $4, $5::vector)",
-                    uuid.UUID(chunk_id), uuid.UUID(doc_id), chunk.content, i, embedding,
+                    "INSERT INTO chunks (id, document_id, tenant_id, content, chunk_index, embedding) "
+                    "VALUES ($1, $2, (SELECT id FROM tenants WHERE name='default'), $3, $4, $5::vector)",
+                    uuid.UUID(chunk_id), uuid.UUID(doc_id), chunk.content, i, str(embedding),
                 )
 
         # Index full text in Elasticsearch for BM25
@@ -87,7 +87,7 @@ async def ingest_document(
             )
         raise
 
-    return doc_id
+    return {"document_id": doc_id, "document_name": filename, "chunks_created": len(chunks)}
 
 
 async def query_pipeline(
@@ -148,7 +148,7 @@ async def query_pipeline(
             "content": d["content"],
             "document_id": d.get("document_id", ""),
             "document_name": d.get("document_name", ""),
-            "score": d.get("rerank_score", d.get("rrf_score", 0.0)),
+            "score": d["rerank_score"] if reranked else d.get("rrf_score", d.get("score", 0.0)),
         }
         for d in docs
     ]

@@ -1,17 +1,19 @@
 # Private Enterprise AI Platform
 
-Open-source platform for deploying private AI infrastructure with local LLMs, RAG pipelines, and AI agents - no data leaves your environment.
+A production-ready, Kubernetes-native platform for running fully private AI — local LLMs, RAG pipelines, and an MCP tool catalog. No data leaves your infrastructure.
 
-## Features
+## What's Inside
 
-- **Local LLM Inference**: Run models like Llama, Mistral, or custom models on your hardware
-- **RAG Pipelines**: Document ingestion, embedding generation, and semantic search
-- **AI Agents**: Multi-step reasoning with tool integration via MCP protocol
-- **Multi-tenancy**: Secure tenant isolation with RBAC and authentication
-- **GPU Management**: NVIDIA GPU Operator (Linux) or Apple Metal via Ollama (Mac)
-- **OpenAI-Compatible API**: Drop-in replacement for OpenAI API
-- **Enterprise Observability**: Prometheus, Grafana, Loki, Tempo integration
-- **Kubernetes-Native**: Production-ready deployment on any K8s cluster
+| Subsystem | Description |
+|-----------|-------------|
+| **LLM Inference** | Ollama (Mac/Metal) or vLLM (NVIDIA/CUDA) — OpenAI-compatible API |
+| **Embedding Service** | Infinity with `BAAI/bge-small-en-v1.5` (384-dim), CPU |
+| **Hybrid RAG** | Dense (pgvector) + BM25 (Elasticsearch) + cross-encoder reranking |
+| **Agentic RAG** | LangGraph self-correcting retrieval loop with Langfuse tracing |
+| **Graph RAG** | Neo4j knowledge graph + entity extraction + hybrid traversal |
+| **MCP Subsystem** | Tool catalog (PostgreSQL), MCP server, MCP client proxy — agents discover and call any tool via REST |
+| **API Gateway** | FastAPI, single entry point at `:30880`, proxies all subsystems |
+| **Observability** | Prometheus + Grafana for infrastructure metrics |
 
 ## Quick Start
 
@@ -36,7 +38,7 @@ Mac M-series chips use **Apple Metal** for GPU acceleration (no NVIDIA/CUDA requ
 The model server runs **outside** the kind cluster via [Ollama](https://ollama.com/).  
 All other services (PostgreSQL, Prometheus, Grafana, API Gateway) deploy inside kind normally.
 
-### Stage 0 — Create kind cluster (Mac)
+### Stage 0 — Create kind cluster
 
 ```bash
 cd infra/kind && bash setup-kind.sh
@@ -80,14 +82,14 @@ Deploys [Infinity](https://github.com/michaelfeil/infinity) with `BAAI/bge-small
 No platform differences — runs CPU-only on both Mac and NVIDIA nodes.  
 First run downloads ~200 MB model; subsequent starts use the cached PVC.
 
-### Deploy All Stages at Once (Mac)
+### Deploy All Stages at Once
 
 ```bash
 make deploy-all
 # or: bash scripts/install-all.sh all
 ```
 
-### Verify (Mac)
+### Verify
 
 ```bash
 curl http://localhost:30880/health          # API Gateway
@@ -105,7 +107,7 @@ vLLM runs **inside** the kind cluster with full GPU access via the NVIDIA GPU Op
 > **WSL2 note**: GPU passthrough into kind is not supported in WSL2.  
 > On WSL2, run `GPU_MODE=nvidia bash scripts/install-stage2.sh` which deploys vLLM as an external process instead of in-cluster.
 
-### Stage 0 — Create kind cluster (NVIDIA)
+### Stage 0 — Create kind cluster
 
 ```bash
 cd infra/kind && bash setup-kind-gpu.sh
@@ -142,14 +144,14 @@ bash scripts/install-stage4.sh
 # or: make deploy-stage4
 ```
 
-### Deploy All Stages at Once (NVIDIA)
+### Deploy All Stages at Once
 
 ```bash
 make deploy-all-nvidia
 # or: GPU_MODE=nvidia bash scripts/install-all.sh all
 ```
 
-### Verify (NVIDIA)
+### Verify
 
 ```bash
 curl http://localhost:30880/health          # API Gateway
@@ -167,8 +169,8 @@ bash scripts/verify-gpu.sh                 # NVIDIA K8s GPU check (Linux auto-de
 | Grafana | http://localhost:30030 | admin / admin |
 | Prometheus | http://localhost:30090 | — |
 | PostgreSQL | localhost:30432 | postgres / changeme-postgres-admin |
-| Ollama API (Mac) | http://localhost:11434 | — |
-| vLLM API (NVIDIA) | http://localhost:30800 | — |
+| Ollama API | http://localhost:11434 | — |
+| vLLM API | http://localhost:30800 | — |
 | Infinity Embeddings | cluster-internal only | — |
 
 ```bash
@@ -201,153 +203,76 @@ kubectl get svc --all-namespaces
 
 ## Project Status
 
-**Current Stage**: Stage 5 — RAG Services (Hybrid, Agentic, Graph)  
-**Status**: Complete  
-**Last Updated**: 2026-07-22
+**Last Updated**: 2026-07-27
 
-**Completed Stages:**
-- ✅ Stage 0: Foundation Setup (kind cluster)
-- ✅ Stage 1: Core Infrastructure (PostgreSQL + Prometheus + Grafana)
-- ✅ Stage 2: Model Inference Runtime (Ollama on Mac / vLLM on NVIDIA)
-- ✅ Stage 3: API Gateway (FastAPI with OpenAI-compatible endpoints)
-- ✅ Stage 4: Embedding Service (Infinity + BAAI/bge-small-en-v1.5, 384-dim)
-- ✅ Stage 5: RAG Services (Hybrid Search + Agentic LangGraph + Graph Neo4j)
-
-**Next:** Stage 6 — RAG Evaluation & Observability (RAGAS metrics, Langfuse dashboards)
+| Stage | Name | Status |
+|-------|------|--------|
+| 0 | Foundation Setup (kind cluster) | ✅ Done |
+| 1 | Core Infrastructure (PostgreSQL, Prometheus, Grafana) | ✅ Done |
+| 2 | Model Inference Runtime (Ollama / vLLM) | ✅ Done |
+| 3 | API Gateway (FastAPI, OpenAI-compatible) | ✅ Done |
+| 4 | Embedding Service (Infinity, BGE-Small 384-dim) | ✅ Done |
+| 5 | RAG Services (Hybrid + Agentic + Graph) | ✅ Done |
+| 6 | MCP Subsystem (Hub + Server + Client) | ✅ Done |
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed stage-by-stage roadmap.
 
 ## Architecture
 
-### High-Level System Architecture
+![Private Enterprise AI Platform — Architecture](private_enterprise_ai_architecture_v1.svg)
 
-```mermaid
-graph TB
-    subgraph "Client Layer"
-        Client[Client Applications]
-    end
-    
-    subgraph "Kubernetes Cluster"
-        subgraph "API Layer"
-            Gateway[API Gateway<br/>FastAPI<br/>:30880]
-        end
-        
-        subgraph "AI Services"
-            vLLM[vLLM Server<br/>LLM Inference<br/>Llama-3.2-3B]
-            Infinity[Infinity<br/>Embeddings<br/>BGE-Small]
-            RAG[RAG Service<br/>Document Processing<br/>Vector Search]
-            Agent[Agent Service<br/>LangChain/NeMo<br/>MCP Tools]
-        end
-        
-        subgraph "Data Layer"
-            PostgreSQL[(PostgreSQL<br/>+pgvector<br/>:30432)]
-        end
-        
-        subgraph "Observability"
-            Prometheus[Prometheus<br/>:30090]
-            Grafana[Grafana<br/>:30030]
-        end
-    end
-    
-    Client -->|HTTP/REST| Gateway
-    Gateway -->|OpenAI API| vLLM
-    Gateway -->|Embeddings| Infinity
-    Gateway -->|RAG Queries| RAG
-    Gateway -->|Agent Tasks| Agent
-    
-    RAG --> Infinity
-    RAG --> vLLM
-    RAG --> PostgreSQL
-    Agent --> vLLM
-    
-    Gateway -.->|Metrics| Prometheus
-    vLLM -.->|Metrics| Prometheus
-    RAG -.->|Metrics| Prometheus
-    
-    Prometheus --> Grafana
-    
-    style Gateway fill:#4CAF50
-    style vLLM fill:#2196F3
-    style PostgreSQL fill:#FF9800
-    style Grafana fill:#E91E63
+```
+Client / Agent
+      │
+      ▼
+API Gateway  :30880
+      │
+      ├─ /v1/chat/*          → Ollama LLM or vLLM
+      ├─ /v1/embeddings/*    → Infinity Embeddings
+      ├─ /v1/rag/hybrid/*    → hybrid-rag  :8001
+      ├─ /v1/rag/agentic/*   → agentic-rag :8002
+      ├─ /v1/rag/graph/*     → graph-rag   :8003
+      └─ /v1/mcp/*           → mcp-hub     :8010
+                                    │
+                                    ├─ local tools  → mcp-server :8011 → RAG / LLM / Embeddings
+                                    └─ remote tools → mcp-client :8012 → External MCP servers
 ```
 
-### Current Implementation Status
+All RAG pipelines share: PostgreSQL + pgvector (chunks), Infinity Embeddings, Infinity Reranker.
+Graph RAG additionally uses Neo4j; Hybrid RAG uses Elasticsearch; Agentic RAG uses Langfuse.
 
-**Completed (Stages 0-5)**:
-- ✅ Kubernetes cluster (kind)
-- ✅ PostgreSQL + pgvector
-- ✅ Prometheus & Grafana
-- ✅ API Gateway (router-split, per-domain clients)
-- ✅ Infinity Embeddings (BAAI/bge-small-en-v1.5, 384-dim)
-- ✅ Infinity Reranker (BAAI/bge-reranker-v2-m3, separate pod)
-- ✅ Hybrid RAG (pgvector + Elasticsearch BM25 + RRF + cross-encoder)
-- ✅ Agentic RAG (LangGraph self-correcting, Langfuse tracing)
-- ✅ Graph RAG (Neo4j knowledge graph + entity extraction + hybrid traversal)
-
-**Pending (Stages 6+)**:
-- ⏳ Auth & Multi-tenancy (Stage 7 — Keycloak, JWT)
-- ⏳ Model Registry (Stage 8 — Harbor)
-- ⏳ Agent Platform (Stages 10-11 — MCP, LangChain agents)
-
-Full architecture details in `docs/architecture/`.
+Full architecture details in `rag/ARCHITECTURE.md` and `mcp/ARCHITECTURE.md`.
 
 ## Documentation
 
-- **[Implementation Plan](IMPLEMENTATION_PLAN.md)**: Stage-by-stage development guide
-- **[Technology Stack](docs/tech/)**: Reference docs for all technologies used
-- **[Architecture](docs/architecture/)**: System design and decisions (coming in Stage 1+)
-- **[API Documentation](docs/api/)**: API specs and examples (coming in Stage 3+)
-- **[Deployment Guide](docs/deployment/)**: Production deployment instructions (coming in Stage 12)
+- **[RAG Pipelines](rag/README.md)** — Pipeline comparison, API reference, real request/response examples
+- **[RAG Architecture](rag/ARCHITECTURE.md)** — Data flows, component diagram, shared code map
+- **[MCP Subsystem](mcp/README.md)** — Tool catalog API, built-in tools, external server registration
+- **[MCP Architecture](mcp/ARCHITECTURE.md)** — Routing logic, wire protocol, DB schema
+- **[Technology Stack](docs/tech/)** — Reference docs for all technologies used
 
 ## Technology Stack
 
-**Infrastructure**: Kubernetes, Helm, kind, NVIDIA GPU Operator  
-**AI Runtime**: vLLM, llama.cpp, Infinity Embeddings, NVIDIA NeMo  
-**Backend**: Python, FastAPI, LangChain, LlamaIndex  
-**Storage**: PostgreSQL + pgvector, Harbor Registry  
-**Observability**: Prometheus, Grafana, Loki, Tempo, OpenTelemetry  
-**Security**: Keycloak, HashiCorp Vault, RBAC
-
-See `docs/tech/` for detailed technology descriptions.
-
-## Development Workflow
-
-This project follows a **stage-gate approach**:
-
-1. Review stage objectives in IMPLEMENTATION_PLAN.md
-2. Implement stage deliverables
-3. Test against exit criteria
-4. User review and approval
-5. Proceed to next stage
-
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for full workflow details.
+**Infrastructure**: Kubernetes (kind), Helm, Docker  
+**AI Runtime**: Ollama (Mac/Metal), vLLM (NVIDIA/CUDA), Infinity Embeddings + Reranker  
+**Backend**: Python 3.11, FastAPI, asyncpg, httpx, LangChain, LangGraph  
+**Storage**: PostgreSQL + pgvector (vectors), Elasticsearch (BM25), Neo4j (knowledge graph)  
+**Observability**: Prometheus, Grafana, Langfuse (agent traces)
 
 ## Project Structure
 
 ```
-vmware_private_ai/
-├── apps/              # Application services (api-gateway, rag-service, etc.)
-├── infra/             # Infrastructure as code (Helm charts, K8s manifests)
-├── packages/          # Shared libraries (auth, observability, common)
-├── docs/              # Documentation
-├── scripts/           # Utility scripts
-├── models/            # Model storage (gitignored)
-└── tests/             # Integration and E2E tests
+private_enterprise_ai/
+├── apps/api-gateway/      # FastAPI gateway — proxies all subsystems at :30880
+├── rag/                   # RAG pipelines (hybrid-rag, agentic-rag, graph-rag, shared/)
+├── mcp/                   # MCP subsystem (mcp-hub, mcp-server, mcp-client, shared/)
+├── packages/shared-db/    # asyncpg pool helper + DB migrations
+├── infra/helm/            # Helm charts for all services
+├── scripts/               # Install + verify scripts
+├── tests/unit/            # Unit tests for RAG and MCP logic
+└── docs/                  # Tech reference docs
 ```
-
-## Contributing
-
-This project is in active development. Contributions welcome after Stage 6 (core RAG functionality complete).
-
-## License
-
-[To be determined - suggest Apache 2.0 or MIT]
-
-## Support
-
-For questions or issues during development, contact the project maintainer.
 
 ---
 
-**Note**: This platform is designed for private enterprise use. All processing happens locally - no data is sent to external AI providers.
+**This platform is designed for private enterprise use. All processing happens locally — no data is sent to external AI providers.**

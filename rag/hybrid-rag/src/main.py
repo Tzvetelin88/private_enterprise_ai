@@ -72,7 +72,7 @@ async def upload(file: UploadFile = File(...)):
     if _pool is None or _es is None:
         raise HTTPException(status_code=503, detail="Service initializing")
 
-    doc_id = await ingest_document(
+    result = await ingest_document(
         pool=_pool,
         es=_es,
         es_index=settings.elasticsearch_index,
@@ -83,7 +83,7 @@ async def upload(file: UploadFile = File(...)):
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
     )
-    return {"document_id": doc_id, "status": "indexed"}
+    return {"status": "indexed", **result}
 
 
 @app.post("/query")
@@ -115,7 +115,7 @@ async def list_documents():
         raise HTTPException(status_code=503, detail="Service initializing")
     async with _pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT id::text, name, status, rag_type, created_at FROM documents WHERE rag_type = 'hybrid' ORDER BY created_at DESC"
+            "SELECT id::text, filename, status, created_at FROM documents ORDER BY created_at DESC"
         )
     return [dict(r) for r in rows]
 

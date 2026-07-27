@@ -1,0 +1,29 @@
+replicaCount: 1
+
+image:
+  repository: mcp-server
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8011
+
+config:
+  hybridRagUrl: "http://hybrid-rag:8001"
+  agenticRagUrl: "http://agentic-rag:8002"
+  graphRagUrl: "http://graph-rag:8003"
+  llmUrl: "http://host.docker.internal:11434"
+  llmModel: "llama3.2:3b"
+  infinityEmbeddingsUrl: "http://infinity-embeddings:7997"
+  embeddingModel: "BAAI/bge-small-en-v1.5"
+  mcpHubUrl: "http://mcp-hub:8010"
+  debug: false
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"

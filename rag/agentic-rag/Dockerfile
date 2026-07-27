@@ -2,12 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e . && pip install --no-cache-dir uvicorn
+COPY agentic-rag/pyproject.toml .
+COPY agentic-rag/src/ ./src/
+RUN pip install --no-cache-dir . && pip install --no-cache-dir uvicorn
 
-# Copy shared RAG utilities and service source
-COPY ../../shared /app/shared
-COPY src/ ./src/
+# Copy shared RAG utilities
+COPY shared/ /app/shared
 
 ENV PYTHONPATH=/app
 

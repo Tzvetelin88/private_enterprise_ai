@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     agentic_rag_url: str = "http://agentic-rag:8002"
     graph_rag_url: str = "http://graph-rag:8003"
     rag_timeout: int = 120
+    mcp_hub_url: str = "http://mcp-hub:8010"
+    mcp_timeout: int = 60
 
     # Observability
     enable_metrics: bool = True

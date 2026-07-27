@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: mcp-hub
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8010
+
+config:
+  databaseUrl: "postgresql://postgres:changeme-postgres-admin@postgres:5432/private_ai"
+  mcpServerUrl: "http://mcp-server:8011"
+  mcpClientUrl: "http://mcp-client:8012"
+  debug: false
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
