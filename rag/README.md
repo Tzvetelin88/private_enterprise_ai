@@ -326,6 +326,110 @@ When running in Kubernetes (via the install scripts), all endpoints are prefixed
 | `http://localhost:8001/query` | `http://localhost:30880/v1/rag/hybrid/query` |
 | `http://localhost:8002/upload` | `http://localhost:30880/v1/rag/agentic/upload` |
 | `http://localhost:8002/query` | `http://localhost:30880/v1/rag/agentic/query` |
+| `http://localhost:8002/query/approve` | `http://localhost:30880/v1/rag/agentic/query/approve` |
+| `http://localhost:8002/query/feedback` | `http://localhost:30880/v1/rag/agentic/query/feedback` |
 | `http://localhost:8003/upload` | `http://localhost:30880/v1/rag/graph/upload` |
 | `http://localhost:8003/query` | `http://localhost:30880/v1/rag/graph/query` |
 | `http://localhost:8003/graph/{entity}` | `http://localhost:30880/v1/rag/graph/graph/{entity}` |
+
+---
+
+## Production Patterns (Agentic RAG)
+
+The Agentic RAG service includes four production-grade patterns implemented on top of the base LangGraph pipeline.
+
+### 1. Structured Output Parsing (LangChain)
+
+**What it does:** The `grade_documents` node calls the LLM through a real LangChain `Runnable` (`llm_with_fallback`, a `ChatOllama` chain) and parses its response with `PydanticOutputParser(GradeResult)`, where `GradeResult.grade: Literal["relevant", "irrelevant"]`. On a parse failure it retries up to 2 more times before falling back to a lenient keyword heuristic — so the grade is always one of exactly two values, never freeform text like "YES" or "The documents seem relevant".
+
+**How to observe:** `metadata.final_grade` in every `/query` response is always exactly `"relevant"` or `"irrelevant"`.
+
+```json
+{"metadata": {"final_grade": "relevant", ...}}
+```
+
+### 2. LLM Fallback Chain (LangChain)
+
+**What it does:** `grade_documents`, `rewrite_query`, and `generate` all call `llm_with_fallback = ChatOllama(model=LLM_MODEL).with_fallbacks([ChatOllama(model=FALLBACK_LLM_MODEL)])`. If the primary model is unreachable, LangChain's own fallback mechanism transparently retries the same call against the fallback model — no manual retry loop in node code.
+
+**How to observe:** When the primary Ollama model is unavailable, the response is still returned successfully (via `FALLBACK_LLM_MODEL`, default `llama3.2:3b`) instead of erroring out.
+
+### 3. Redis LLM Response Cache (LangChain global cache)
+
+**What it does:** On startup, the service sets the global LangChain LLM cache (`langchain_core.globals.set_llm_cache()`) to a Redis backend. Because every node's LLM call goes through a LangChain `Runnable` (see pattern 2), this cache actually intercepts them: identical prompts (same grading question + context, same rewrite, same generation prompt) are served from Redis in milliseconds instead of re-invoking the model.
+
+**How to observe:**
+```bash
+# First call — cache miss, full LLM invoke (~2 s)
+curl -X POST http://localhost:8002/query \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "What is pgvector?", "top_k": 3}'
+
+# Second identical call — cache hit (<50 ms)
+curl -X POST http://localhost:8002/query \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "What is pgvector?", "top_k": 3}'
+```
+
+Redis must be running (included in `docker-compose.yml`). If Redis is down, LLM calls run normally — no service interruption.
+
+### 4. LangGraph Checkpointing (PostgreSQL)
+
+**What it does:** Every workflow run is persisted to PostgreSQL via `AsyncPostgresSaver`. The `checkpoint_id` (LangGraph `thread_id`) appears in every `/query` response so the run can be inspected or resumed.
+
+**How to observe:**
+```json
+{"metadata": {"checkpoint_id": "3f1a4e89-a012-8c2d-b5ca-a827f3990e4b", ...}}
+```
+
+Set `CHECKPOINTING_ENABLED=false` to disable (not recommended in production).
+
+### 5. Human-in-the-Loop (HITL) — LangGraph interrupt
+
+**What it does:** When `HITL_ENABLED=true`, the workflow pauses *after* grading documents and *before* generating the answer. The client receives `status: "paused"` with the retrieved documents and a `checkpoint_id`. A human can review the context and approve via `POST /query/approve`, which verifies the checkpoint exists (a real 404 if not, rather than string-matching an error message), records `hitl_approved: true` on the persisted state as an audit trail, and resumes the workflow — continuing the same Langfuse trace the paused run started.
+
+**How to observe:**
+
+```bash
+# Step 1 — query pauses before generate
+curl -X POST http://localhost:8002/query \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "Explain pgvector", "top_k": 3}'
+# → {"status": "paused", "checkpoint_id": "thread-abc", "documents": [...]}
+
+# Step 2 — human reviews documents, approves
+curl -X POST http://localhost:8002/query/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"thread_id": "thread-abc"}'
+# → {"answer": "...", "sources": [...], "metadata": {...}}
+
+# Unknown thread_id → a real 404, not a 500
+curl -X POST http://localhost:8002/query/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"thread_id": "does-not-exist"}'
+# → 404 {"detail": "Checkpoint not found"}
+```
+
+### 6. Langfuse Visual Tracing + User Feedback
+
+**What it does:** Every `POST /query` call creates **one** Langfuse trace (via the low-level SDK) and threads only its `trace_id` (a plain string) through `GraphState` — not a live SDK object, since `GraphState` is checkpointed to PostgreSQL and a live client handle wouldn't survive that or a restart. Each node rehydrates a trace handle from `trace_id` (`retrieve` creates a manual span; `grade_documents`/`rewrite_query`/`generate` get automatic generation spans from a callback handler bound to that same trace_id via `get_client().trace(id=trace_id).get_langchain_handler()`) — so every node shows up nested under the **same** trace, not scattered across disconnected ones. Both `trace_url` and `trace_id` are returned in `metadata`; `POST /query/feedback` uses `trace_id` to attach a user rating.
+
+**How to observe:**
+
+```json
+{"metadata": {"trace_url": "http://localhost:3000/trace/abc123", "trace_id": "abc123", ...}}
+```
+
+1. Open Langfuse at **http://localhost:3000** (create an account on first visit)
+2. Go to **Settings → API Keys** and paste the keys into `docker-compose.yml` (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`)
+3. Send any `/query` — the `trace_url` in the response opens a single trace with all four node spans (`retrieve`, `grade_documents`, `rewrite_query`, `generate`) nested under it, each with latency and token usage
+4. Record feedback against it:
+
+```bash
+curl -X POST http://localhost:8002/query/feedback \
+  -H 'Content-Type: application/json' \
+  -d '{"trace_id": "abc123", "score": 1, "comment": "correct and well-sourced"}'
+# → {"status": "recorded", "trace_id": "abc123"}
+```
+
+The score appears on the trace in the Langfuse UI, alongside its spans.

@@ -15,10 +15,17 @@ dependencies = [
     "httpx>=0.26.0",
     "python-multipart>=0.0.6",
     "asyncpg>=0.29.0",
-    "langgraph>=0.1.0",
+    # LangGraph + checkpointing
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    # LangChain + structured output + fallback chains
     "langchain>=0.2.0",
     "langchain-community>=0.2.0",
+    "langchain-ollama>=0.2.0",
+    # Langfuse tracing
     "langfuse>=2.0.0,<3.0.0",
+    # Redis LLM response cache
+    "redis>=5.0.0",
     "pypdf>=4.0.0",
     "python-docx>=1.1.0",
 ]

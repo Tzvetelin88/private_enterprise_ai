@@ -61,6 +61,7 @@ sequenceDiagram
     hybrid-rag → mcp-server: {answer, sources, metadata}
     mcp-server → mcp-hub: ToolCallResult
     mcp-hub → PostgreSQL: INSERT INTO mcp_audit_log
+    mcp-hub → Langfuse: trace "mcp.rag_hybrid_query" (async, batched)
     mcp-hub → API Gateway: ToolCallResult
     API Gateway → Agent: response
 ```
@@ -78,6 +79,7 @@ sequenceDiagram
     External MCP → mcp-client: result
     mcp-client → mcp-hub: ToolCallResult
     mcp-hub → PostgreSQL: INSERT INTO mcp_audit_log
+    mcp-hub → Langfuse: trace "mcp.confluence_search" (async, batched)
     mcp-hub → API Gateway: ToolCallResult
     API Gateway → Agent: response
 ```
@@ -103,6 +105,7 @@ POST /tools/{name}/call arrives at mcp-hub
                 payload: {"url": tool.server_url, "tool_name": name, "arguments": {...}}
     │
     └─ INSERT INTO mcp_audit_log (tool_name, input, output, latency_ms, success, error)
+    └─ observability.trace_tool_call(...) → Langfuse trace "mcp.{name}" (best-effort, never blocks the response)
 ```
 
 ---
@@ -244,4 +247,4 @@ This means: registering many external servers has no cost until they are actuall
 |--------|---------|
 | `schemas.py` | Pydantic types: `ToolDefinition`, `ToolCallRequest`, `ToolCallResult` |
 | `registry_client.py` | Async httpx wrapper for hub calls (`register_tool`, `list_tools`) |
-| `observability.py` | Langfuse trace wrapper for tool calls (mirrors RAG tracing pattern) |
+| `observability.py` | Langfuse trace wrapper for tool calls (mirrors `rag/agentic-rag/src/tracing.py`); `get_client()` caches a single Langfuse client, `trace_tool_call()` is called from `mcp-hub`'s `router.py::call_tool()`, `flush()` runs once on shutdown |

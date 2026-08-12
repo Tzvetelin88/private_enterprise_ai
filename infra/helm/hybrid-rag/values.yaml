@@ -15,7 +15,7 @@ config:
   infinityEmbeddingsUrl: "http://infinity-embeddings:7997"
   infinityRerankerUrl: "http://infinity-reranker:7998"
   llmUrl: "http://host.docker.internal:11434"  # Ollama (Mac) or change to in-cluster vLLM
-  llmModel: "llama3.2:3b"
+  llmModel: "qwen3.5:4b"
   embeddingModel: "BAAI/bge-small-en-v1.5"
   rerankerModel: "BAAI/bge-reranker-v2-m3"
   debug: false

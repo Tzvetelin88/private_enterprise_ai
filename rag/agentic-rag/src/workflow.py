@@ -3,14 +3,22 @@
 Graph:
   retrieve → grade_documents → generate (if relevant)
                              → rewrite_query → retrieve (if irrelevant, max 3 iterations)
+
+LangGraph patterns used:
+  - AsyncPostgresSaver checkpointer: workflow state persists to PostgreSQL; survives restarts
+  - interrupt_before=["generate"]: HITL pause before generate node when hitl_enabled=True
 """
 from __future__ import annotations
+
+import logging
 
 from langgraph.graph import END, StateGraph  # type: ignore[import-untyped]
 
 from .config import settings
 from .nodes import generate, grade_documents, retrieve, rewrite_query
 from .state import GraphState
+
+logger = logging.getLogger(__name__)
 
 
 def _should_generate(state: GraphState) -> str:
@@ -22,7 +30,16 @@ def _should_generate(state: GraphState) -> str:
     return "rewrite_query"
 
 
-def build_graph() -> StateGraph:
+async def build_graph(pool=None):
+    """Build and compile the LangGraph StateGraph.
+
+    Args:
+        pool: asyncpg connection pool for PostgreSQL checkpointing.
+              When None or checkpointing_enabled=False, compiles without a checkpointer.
+
+    Returns:
+        A compiled LangGraph CompiledGraph ready for ainvoke().
+    """
     graph = StateGraph(GraphState)
 
     graph.add_node("retrieve", retrieve)
@@ -40,8 +57,18 @@ def build_graph() -> StateGraph:
     graph.add_edge("rewrite_query", "retrieve")
     graph.add_edge("generate", END)
 
-    return graph.compile()
+    checkpointer = None
+    if settings.checkpointing_enabled and pool is not None:
+        try:
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # type: ignore[import-untyped]
+            checkpointer = AsyncPostgresSaver(pool)
+            await checkpointer.setup()  # creates checkpoint tables if absent
+            logger.info("LangGraph checkpointing enabled (PostgreSQL)")
+        except Exception as exc:
+            logger.warning("Could not enable PostgreSQL checkpointer: %s — running without persistence", exc)
 
+    interrupt_before = ["generate"] if settings.hitl_enabled else []
+    if interrupt_before:
+        logger.info("HITL enabled — workflow will pause before 'generate' node")
 
-# Module-level compiled graph — built once on import
-compiled_graph = build_graph()
+    return graph.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)

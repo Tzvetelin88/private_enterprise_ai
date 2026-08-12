@@ -121,3 +121,63 @@ def end_generation(generation, output: Any = None, usage: dict | None = None):
         generation.end(**kwargs)
     except Exception as exc:
         logger.debug("Could not end generation: %s", exc)
+
+
+def get_trace(trace_id: str):
+    """Rehydrate a trace handle from a serialised trace_id.
+
+    Langfuse's ``trace(id=...)`` call has upsert semantics: passing an id that
+    already exists continues that trace instead of creating a new one. This
+    lets nodes create manual spans against the *same* trace shown in the
+    response's trace_url even though only the trace_id (not the live SDK
+    object) survives GraphState/checkpointing.
+    """
+    if not trace_id:
+        return None
+    client = get_client()
+    if client is None:
+        return None
+    try:
+        return client.trace(id=trace_id)
+    except Exception as exc:
+        logger.debug("Could not rehydrate trace '%s': %s", trace_id, exc)
+        return None
+
+
+def get_callback_handler(trace_id: str):
+    """Return a LangChain CallbackHandler bound to an existing Langfuse trace_id.
+
+    The installed langfuse 2.x SDK's CallbackHandler has no `trace_id=` kwarg
+    (that's a v3+ API) — the v2 mechanism is to rehydrate a StatefulTraceClient
+    via get_trace() and ask *it* for a bound handler. Binding this way (rather
+    than constructing a bare, unbound CallbackHandler) is what makes LLM spans
+    created by LangChain/LangGraph nest under the *same* trace as the manual
+    spans in this module and the trace_url returned to the client — an unbound
+    handler would start its own disconnected trace per invocation instead.
+    """
+    if not trace_id or settings.tracing_backend != "langfuse":
+        return None
+    trace = get_trace(trace_id)
+    if trace is None:
+        return None
+    try:
+        return trace.get_langchain_handler(update_parent=True)
+    except Exception as exc:
+        logger.warning("Could not build Langfuse callback handler: %s", exc)
+        return None
+
+
+def score_trace(trace_id: str, name: str, value: float, comment: str | None = None) -> bool:
+    """Attach a user-feedback score to an existing trace. Returns True on success."""
+    if not trace_id:
+        return False
+    client = get_client()
+    if client is None:
+        return False
+    try:
+        client.score(trace_id=trace_id, name=name, value=value, comment=comment)
+        client.flush()
+        return True
+    except Exception as exc:
+        logger.warning("Could not record score for trace '%s': %s", trace_id, exc)
+        return False

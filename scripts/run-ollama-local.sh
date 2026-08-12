@@ -4,7 +4,7 @@
 # Ollama exposes an OpenAI-compatible API on port 11434
 set -e
 
-MODEL="${OLLAMA_MODEL:-llama3.2:3b}"
+MODEL="${OLLAMA_MODEL:-qwen3.5:4b}"
 PORT=11434
 
 echo "🍎 Starting Ollama model server (Mac / Metal)"

@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 import asyncpg
 from fastapi import FastAPI
 
+from shared import observability
+
 from .config import settings
 from .router import router
 
@@ -25,6 +27,10 @@ async def lifespan(app: FastAPI):
     logger.info("Connected to PostgreSQL")
     yield
     await pool.close()
+    # Flush any buffered Langfuse tool-call trace events before exit — the SDK
+    # batches in a background thread, so without this, spans from calls made
+    # just before shutdown could be lost.
+    observability.flush()
     logger.info("Shutdown complete")
 
 

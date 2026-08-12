@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Ollama / vLLM
     llm_url: str = "http://host.docker.internal:11434"
-    llm_model: str = "llama3.2:3b"
+    llm_model: str = "qwen3.5:4b"
     llm_timeout: int = 120
 
     # Graph traversal

@@ -44,9 +44,10 @@ graph LR
 |---------|------|------|
 | `infinity-embeddings` | 7997 (ClusterIP) | Dense vector embeddings (`BAAI/bge-small-en-v1.5`, 384-dim) |
 | `infinity-reranker` | 7998 (ClusterIP) | Cross-encoder reranking (`BAAI/bge-reranker-v2-m3`) |
-| PostgreSQL + pgvector | 5432 (ClusterIP) | Document/chunk storage + HNSW vector index |
+| PostgreSQL + pgvector | 5432 (ClusterIP) | Document/chunk storage + HNSW vector index; LangGraph checkpoints |
 | Elasticsearch | 9200 | BM25 keyword index (Hybrid RAG only) |
 | Neo4j | 7687 | Knowledge graph (Graph RAG only) |
+| Redis | 6379 | LLM response cache (Agentic RAG; `redis:7-alpine`) |
 | Langfuse | 3000 | Agent trace observability (Agentic RAG) |
 | Ollama | 11434 (host) | LLM generation (all pipelines) |
 
@@ -64,6 +65,7 @@ All three pipelines import from the shared module:
 | `reranking/reranker.py` | Async Infinity-reranker wrapper (graceful fallback) |
 | `observability/tracing.py` | Langfuse/LangSmith callback setup (config-driven) |
 | `evaluation/metrics.py` | Lightweight faithfulness and relevance metrics |
+| `cache/redis_cache.py` | Redis LLM response cache — calls `langchain_core.globals.set_llm_cache()` |
 
 ---
 
@@ -141,7 +143,13 @@ stateDiagram-v2
     rewrite_query --> retrieve: iteration < 3
     rewrite_query --> generate: iteration == 3
     generate --> [*]
+    note right of grade_documents
+        HITL pause point (hitl_enabled=true)
+        POST /query/approve to resume
+    end note
 ```
+
+> **HITL pause:** When `HITL_ENABLED=true`, the graph uses `interrupt_before=["generate"]`. After grading, the workflow suspends and returns `status: "paused"` + `checkpoint_id` to the caller. Resume by calling `POST /query/approve` with the `thread_id`. Requires `CHECKPOINTING_ENABLED=true` (PostgreSQL `AsyncPostgresSaver`). `/query/approve` checks the checkpoint's existence via `aget_state()` (a real 404 if missing), sets `hitl_approved: true` on the persisted state via `update_state()` before resuming, and rebuilds the Langfuse callback handler from the checkpointed `trace_id` so the resumed `generate` span nests under the same trace as the paused run.
 
 ### Data Flow
 
@@ -156,21 +164,26 @@ sequenceDiagram
 
     C->>GW: POST /v1/rag/agentic/query
     GW->>AR: forward request
-    AR->>LF: start trace
+    AR->>LF: start trace (low-level SDK) → trace_id
+    Note over AR,LF: callback handler bound to trace_id passed into graph.ainvoke() config
     loop up to 3 iterations
         AR->>HR: retrieve(query, top_k)
-        AR->>LLM: grade_documents(query, docs)
+        Note over AR,LF: manual span, rehydrated from trace_id
+        AR->>LLM: grade_documents(query, docs) via llm_with_fallback
+        Note over AR,LF: automatic generation span (bound callback handler)
         alt all relevant
-            AR->>LLM: generate(query + context)
+            AR->>LLM: generate(query + context) via llm_with_fallback
             AR-->>AR: exit loop
         else some irrelevant
-            AR->>LLM: rewrite_query(query)
+            AR->>LLM: rewrite_query(query) via llm_with_fallback
         end
     end
     AR->>LF: end trace
-    AR->>GW: {answer, sources, metadata}
+    AR->>GW: {answer, sources, metadata: {trace_url, trace_id, ...}}
     GW->>C: response
 ```
+
+All three LLM-calling nodes (`grade_documents`, `rewrite_query`, `generate`) invoke a single module-level `llm_with_fallback = ChatOllama(model=LLM_MODEL).with_fallbacks([ChatOllama(model=FALLBACK_LLM_MODEL)])` — routing through a real LangChain `Runnable` (rather than raw `httpx`) is what makes the Redis cache (`set_llm_cache()`) and the fallback chain actually take effect, and what lets LangGraph pass per-node callbacks automatically.
 
 ### GraphState
 
@@ -180,17 +193,42 @@ class GraphState(TypedDict):
     documents: list[dict]
     generation: str
     iterations: int
-    grade: str  # "relevant" | "irrelevant"
+    grade: str         # "relevant" | "irrelevant" (validated by GradeResult Pydantic model)
+    query_rewrites: list[str]
+    trace_url: str      # Langfuse trace URL — populated after ainvoke()
+    trace_id: str        # Langfuse trace id (plain string, not the live SDK object —
+                          # GraphState is checkpointed to PostgreSQL, and a live client
+                          # handle would not survive that round-trip or a restart).
+                          # Nodes rehydrate a trace handle via tracing.get_trace(trace_id).
+    hitl_approved: bool   # True after POST /query/approve is called
+    thread_id: str        # LangGraph thread_id (equals the UUID per request).
+                           # NOTE: named thread_id, not checkpoint_id — LangGraph
+                           # reserves "checkpoint_id" as an internal channel name
+                           # and refuses to compile a graph whose state schema uses
+                           # it. The public API's response field is still called
+                           # checkpoint_id (unchanged contract); only this internal
+                           # GraphState key differs.
 ```
+
+### LangChain Patterns
+
+| Pattern | Where | Effect |
+|---------|-------|--------|
+| **Structured Output** | `nodes.py: GradeResult` + `_grade_parser` (`PydanticOutputParser`) | `grade_documents` parses the LLM's raw text with `PydanticOutputParser`, retrying up to 2×; `grade` is always `"relevant"` or `"irrelevant"` — never freeform |
+| **Multi-strategy parser** | `nodes.py: _parse_grade()` | Last-resort fallback only if `PydanticOutputParser` fails every retry: JSON extraction → keyword match → defaults to `"relevant"` |
+| **LLM Fallback** | `nodes.py: llm_with_fallback` (`ChatOllama.with_fallbacks()`) | Used by all three LLM-calling nodes; on primary-model failure, LangChain transparently retries against `fallback_llm_model` |
+| **Redis Cache** | `shared/cache/redis_cache.py` | Calls `set_llm_cache()` globally; effective because every node LLM call is a LangChain invocation |
 
 ### Key Components
 
 | File | Responsibility |
 |------|---------------|
-| `state.py` | `GraphState` TypedDict definition |
-| `nodes.py` | `retrieve`, `grade_documents`, `rewrite_query`, `generate` nodes |
-| `workflow.py` | `StateGraph` wiring + conditional edges + max-iteration guard |
-| `main.py` | FastAPI: `POST /query` → `graph.invoke()`, Langfuse callback |
+| `state.py` | `GraphState` TypedDict — `trace_id` (serialisable), `hitl_approved`, `thread_id` fields |
+| `nodes.py` | `retrieve`, `grade_documents` (Pydantic + fallback), `rewrite_query`, `generate` nodes; `llm_with_fallback` chain |
+| `workflow.py` | Async `build_graph(pool)`: `StateGraph` + `AsyncPostgresSaver` checkpointer + HITL interrupt |
+| `main.py` | FastAPI: `POST /query` (LangGraph + trace_url/trace_id), `POST /query/approve` (HITL resume), `POST /query/feedback` (score a trace), startup cache |
+| `tracing.py` | Low-level Langfuse SDK wrapper: `start_trace`/`end_trace`, manual spans/generations, `get_trace(trace_id)` (rehydrate), `get_callback_handler(trace_id)` (trace-bound LangChain callback), `score_trace()` |
+| `shared/cache/redis_cache.py` | `setup_llm_cache()`: configures global LangChain LLM cache |
 
 ---
 
@@ -272,10 +310,13 @@ rag/agentic-rag/
   → rag/shared/ingestion/     (parse, chunk)
   → rag/shared/embeddings/    (embed)
   → rag/shared/reranking/     (rerank)
-  → rag/shared/observability/ (Langfuse/LangSmith callbacks)
-  → hybrid-rag retriever      (via HTTP or shared lib)
-  → Ollama                    (grade, rewrite, generate)
-  → Langfuse / LangSmith      (trace storage)
+  → rag/shared/observability/ (Langfuse/LangSmith callbacks — wired into graph.ainvoke())
+  → rag/shared/cache/         (Redis LLM response cache — setup at startup)
+  → hybrid-rag retriever      (via HTTP — retrieve node)
+  → Ollama                    (grade, rewrite, generate — with fallback model)
+  → PostgreSQL                (LangGraph AsyncPostgresSaver checkpoints)
+  → Redis                     (LangChain global LLM cache)
+  → Langfuse / LangSmith      (trace storage; trace_url in response metadata)
 
 rag/graph-rag/
   → rag/shared/ingestion/     (parse, chunk)

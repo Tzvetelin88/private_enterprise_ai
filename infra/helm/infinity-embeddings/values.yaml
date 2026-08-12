@@ -6,8 +6,12 @@ image:
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
+  # NodePort (not ClusterIP) + a pinned nodePort so docker-compose services
+  # (which run on the host, not in-cluster) can reach embeddings at a stable
+  # host.docker.internal port — mirrors how api-gateway/postgresql are exposed.
+  type: NodePort
   port: 7997
+  nodePort: 30797
 
 config:
   model: "BAAI/bge-small-en-v1.5"

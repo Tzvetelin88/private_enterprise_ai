@@ -43,9 +43,14 @@ if [[ "$GPU_MODE" == "mac" ]]; then
     fi
 
     echo ""
-    MODEL="llama3.2:3b"
-    echo "📥 Pulling model: $MODEL (first run downloads ~2 GB)..."
+    MODEL="qwen3.5:4b"
+    echo "📥 Pulling default model: $MODEL (first run downloads ~3.4 GB)..."
     ollama pull "$MODEL"
+
+    echo ""
+    FALLBACK_MODEL="llama3.2:3b"
+    echo "📥 Pulling fallback model: $FALLBACK_MODEL (agentic-rag falls back to this if the primary is unreachable)..."
+    ollama pull "$FALLBACK_MODEL"
 
     echo ""
     echo "✅ Stage 2 Complete — Ollama is running!"

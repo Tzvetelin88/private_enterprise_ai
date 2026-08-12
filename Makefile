@@ -3,7 +3,8 @@
         model-server model-server-mac model-server-nvidia \
         gpu-verify deploy-all deploy-stage0 deploy-stage1 deploy-stage2 deploy-stage3 deploy-stage4 \
         deploy-hybrid-rag deploy-agentic-rag deploy-graph-rag \
-        deploy-stage0-nvidia deploy-stage2-nvidia deploy-all-nvidia
+        deploy-stage0-nvidia deploy-stage2-nvidia deploy-all-nvidia \
+        health-check
 
 help:
 	@echo "Available commands:"
@@ -29,6 +30,9 @@ help:
 	@echo ""
 	@echo "Compute Verification:"
 	@echo "  make gpu-verify         - Check GPU / compute (platform-aware)"
+	@echo ""
+	@echo "Health:"
+	@echo "  make health-check       - Check kind cluster, K8s workloads, docker-compose stacks, and service reachability"
 	@echo ""
 	@echo "Deployment — Mac (default):"
 	@echo "  make deploy-all         - Deploy all stages (Mac)"
@@ -93,6 +97,11 @@ model-server-nvidia:
 
 gpu-verify:
 	bash scripts/verify-gpu.sh
+
+# ── Health ─────────────────────────────────────────────────────────────────────
+
+health-check:
+	bash scripts/health-check.sh
 
 # ── Deployment — Mac (default) ─────────────────────────────────────────────────
 

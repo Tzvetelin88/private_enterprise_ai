@@ -14,7 +14,7 @@ config:
   agenticRagUrl: "http://agentic-rag:8002"
   graphRagUrl: "http://graph-rag:8003"
   llmUrl: "http://host.docker.internal:11434"
-  llmModel: "llama3.2:3b"
+  llmModel: "qwen3.5:4b"
   infinityEmbeddingsUrl: "http://infinity-embeddings:7997"
   embeddingModel: "BAAI/bge-small-en-v1.5"
   mcpHubUrl: "http://mcp-hub:8010"

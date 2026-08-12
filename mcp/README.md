@@ -287,6 +287,22 @@ Limit the number of results: `GET /audit?limit=10`
 
 ---
 
+## Observability — Langfuse Tracing
+
+Every `POST /tools/{name}/call` on `mcp-hub` also emits a Langfuse trace named `mcp.<tool_name>` (in addition to the PostgreSQL audit log above), with the call's input, output, latency, and success/error captured as a span. This mirrors the RAG stack's tracing (`rag/agentic-rag`) and reuses the same Langfuse instance — `mcp-hub` joins `rag-net` specifically to reach it.
+
+Configure via env vars on `mcp-hub` (see `mcp/docker-compose.yml`):
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `TRACING_BACKEND` | `langfuse` | Set to `none` to disable |
+| `LANGFUSE_HOST` | `http://langfuse:3000` | Langfuse instance (shared with the RAG stack) |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | *(empty — must be set)* | From Langfuse UI → Settings → API Keys |
+
+The Langfuse client is created once and cached (`mcp/shared/observability.py::get_client()`), not per call — events are batched and sent in a background thread, and flushed once on service shutdown, so tracing adds no latency to individual tool calls. If Langfuse is unreachable or keys aren't configured, tracing silently no-ops and tool calls are unaffected.
+
+---
+
 ## Error Responses
 
 | Scenario | HTTP Status | Body |

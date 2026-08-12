@@ -12,6 +12,13 @@ services:
       DATABASE_URL: "postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable"
       MCP_SERVER_URL: "http://mcp-server:8011"
       MCP_CLIENT_URL: "http://mcp-client:8012"
+      # Langfuse tool-call tracing (mcp-hub reaches the RAG stack's Langfuse
+      # instance over rag-net). Set TRACING_BACKEND=none to disable.
+      TRACING_BACKEND: "langfuse"
+      LANGFUSE_HOST: "http://langfuse:3000"
+      # Replace with real keys from Langfuse UI after first-run setup (http://localhost:3000)
+      LANGFUSE_PUBLIC_KEY: "pk-lf-7dba23dc-cf07-45e3-9d5f-3d83334f7e39"
+      LANGFUSE_SECRET_KEY: "sk-lf-b44c19e5-0b40-45f8-b1ea-4a2bb3de6c2d"
     networks:
       - mcp-net
       - rag-net
@@ -28,7 +35,7 @@ services:
       AGENTIC_RAG_URL: "http://agentic-rag:8002"
       GRAPH_RAG_URL: "http://graph-rag:8003"
       LLM_URL: "http://host.docker.internal:11434"
-      INFINITY_EMBEDDINGS_URL: "http://host.docker.internal:7997"
+      INFINITY_EMBEDDINGS_URL: "http://host.docker.internal:30797"
       MCP_HUB_URL: "http://mcp-hub:8010"
     depends_on:
       - mcp-hub

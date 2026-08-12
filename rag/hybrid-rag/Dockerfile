@@ -2,9 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for pypdf, python-docx
+# System deps for pypdf, python-docx, and the docker-compose healthcheck (curl)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy pyproject and src before install (src layout requires src/ present at install time)

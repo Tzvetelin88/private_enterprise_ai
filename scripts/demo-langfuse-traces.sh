@@ -287,8 +287,8 @@ banner "7. Langfuse — trace summary"
 
 echo -e "  Fetching recent traces from Langfuse API…\n"
 
-LF_PK="${LANGFUSE_PUBLIC_KEY:-pk-lf-be9b9003-6d6a-419f-a04f-d6035d657db7}"
-LF_SK="${LANGFUSE_SECRET_KEY:-sk-lf-fa952165-bc1a-4786-9280-a9814dc7ea32}"
+LF_PK="${LANGFUSE_PUBLIC_KEY:-pk-lf-...}"
+LF_SK="${LANGFUSE_SECRET_KEY:-sk-lf-...}"
 
 curl -sf -u "$LF_PK:$LF_SK" \
     "http://localhost:3000/api/public/traces?limit=20" 2>/dev/null \

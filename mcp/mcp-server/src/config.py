@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     agentic_rag_url: str = "http://agentic-rag:8002"
     graph_rag_url: str = "http://graph-rag:8003"
     llm_url: str = "http://host.docker.internal:11434"
-    llm_model: str = "llama3.2:3b"
+    llm_model: str = "qwen3.5:4b"
     llm_timeout: int = 120
     infinity_embeddings_url: str = "http://infinity-embeddings:7997"
     embedding_model: str = "BAAI/bge-small-en-v1.5"

@@ -61,7 +61,7 @@ bash scripts/run-ollama-local.sh
 # or: make model-server
 ```
 
-This installs Ollama (if needed), starts the service, and pulls `llama3.2:3b`.  
+This installs Ollama (if needed), starts the service, and pulls `qwen3.5:4b` (default model; override with `OLLAMA_MODEL=<model>`).  
 The API is OpenAI-compatible at `http://localhost:11434`.
 
 ### Stage 3 — API Gateway
@@ -252,12 +252,12 @@ Full architecture details in `rag/ARCHITECTURE.md` and `mcp/ARCHITECTURE.md`.
 
 | Pattern | Technology | What It Provides |
 |---------|-----------|-----------------|
-| **Structured Output Parsing** | LangChain — `GradeResult` Pydantic model | Grade is always `"relevant"` or `"irrelevant"` — never freeform LLM text |
-| **LLM Fallback Chain** | LangChain — connection-error fallback | Primary LLM unreachable → transparent retry with `fallback_llm_model` |
+| **Structured Output Parsing** | LangChain `PydanticOutputParser` — `GradeResult` model | Grade is always `"relevant"` or `"irrelevant"` — never freeform LLM text |
+| **LLM Fallback Chain** | LangChain `ChatOllama.with_fallbacks()` | Primary LLM unreachable → transparent retry with `fallback_llm_model` |
 | **LLM Response Cache** | Redis + LangChain global cache | Identical prompts served from Redis in <50 ms; zero node code changes |
 | **Workflow Checkpointing** | LangGraph `AsyncPostgresSaver` | Workflow state persists to PostgreSQL; survives service restarts |
 | **Human-in-the-Loop (HITL)** | LangGraph `interrupt_before=["generate"]` | Pause before generate for human approval via `POST /query/approve` |
-| **Visual Tracing** | Langfuse callbacks + `trace_url` in response | Every query produces a clickable Langfuse trace at `http://localhost:3000` |
+| **Visual Tracing + Feedback** | Langfuse callbacks + `trace_url`/`trace_id` in response | One trace per query with per-node spans at `http://localhost:3000`; rate it via `POST /query/feedback` |
 
 ## Project Structure
 

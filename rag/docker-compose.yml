@@ -18,7 +18,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
+      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:30797
       - LLM_URL=http://host.docker.internal:11434
     depends_on:
       elasticsearch:
@@ -41,14 +41,26 @@ services:
       - "8002:8002"
     environment:
       - DATABASE_URL=postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable
-      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
+      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:30797
       - LLM_URL=http://host.docker.internal:11434
       - LANGFUSE_HOST=http://langfuse:3000
-      - LANGFUSE_PUBLIC_KEY=pk-lf-...
-      - LANGFUSE_SECRET_KEY=sk-lf-...
+      # Replace with real keys from Langfuse UI after first-run setup (http://localhost:3000)
+      - LANGFUSE_PUBLIC_KEY=pk-lf-7dba23dc-cf07-45e3-9d5f-3d83334f7e39
+      - LANGFUSE_SECRET_KEY=sk-lf-b44c19e5-0b40-45f8-b1ea-4a2bb3de6c2d
+      - REDIS_URL=redis://redis:6379
+      - LLM_CACHE_TTL=3600
+      - CHECKPOINTING_ENABLED=true
+      # Set HITL_ENABLED=true to pause the workflow before generate for human approval
+      - HITL_ENABLED=false
+      # Set LLM_REASONING_ENABLED=true to re-enable "thinking" mode on models
+      # that support it (e.g. Qwen3.5) — off by default since it can 50-100x
+      # token count/latency for grading/rewriting/generation here.
+      - LLM_REASONING_ENABLED=false
     depends_on:
       langfuse:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - rag-net
     healthcheck:
@@ -67,7 +79,7 @@ services:
       - "8003:8003"
     environment:
       - DATABASE_URL=postgresql://postgres:changeme-postgres-admin@host.docker.internal:30432/private_ai?sslmode=disable
-      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:7997
+      - INFINITY_EMBEDDINGS_URL=http://host.docker.internal:30797
       - LLM_URL=http://host.docker.internal:11434
       - NEO4J_URL=bolt://neo4j:7687
       - NEO4J_USER=neo4j
@@ -123,6 +135,20 @@ services:
       interval: 20s
       timeout: 10s
       retries: 10
+
+  # ── Redis (LLM response cache — Agentic RAG) ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    networks:
+      - rag-net
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Langfuse (self-hosted — Agentic RAG observability) ─────────────────────
   langfuse-db:

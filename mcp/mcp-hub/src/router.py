@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from . import catalog, audit
+from shared import observability
 
 logger = logging.getLogger(__name__)
 
@@ -89,25 +90,31 @@ async def call_tool(name: str, request: Request):
 
         latency_ms = int((time.monotonic() - start) * 1000)
         result_data["latency_ms"] = latency_ms
+        success = result_data.get("success", True)
+        output = result_data.get("result")
+        error = result_data.get("error")
 
         await audit.log_call(
             pool=pool,
             tool_name=name,
             input_data=arguments,
-            output_data=result_data.get("result"),
+            output_data=output,
             latency_ms=latency_ms,
-            success=result_data.get("success", True),
-            error=result_data.get("error"),
+            success=success,
+            error=error,
         )
+        observability.trace_tool_call(name, arguments, output, latency_ms, success, error)
         return result_data
 
     except httpx.ConnectError:
         latency_ms = int((time.monotonic() - start) * 1000)
         await audit.log_call(pool, name, arguments, None, latency_ms, False, "Remote MCP server unavailable")
+        observability.trace_tool_call(name, arguments, None, latency_ms, False, "Remote MCP server unavailable")
         raise HTTPException(status_code=503, detail="Remote MCP server unavailable")
     except httpx.HTTPError as e:
         latency_ms = int((time.monotonic() - start) * 1000)
         await audit.log_call(pool, name, arguments, None, latency_ms, False, str(e))
+        observability.trace_tool_call(name, arguments, None, latency_ms, False, str(e))
         raise HTTPException(status_code=503, detail=str(e))
 
 
