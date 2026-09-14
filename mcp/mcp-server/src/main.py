@@ -22,7 +22,8 @@ async def _seed_tools_to_hub() -> None:
         async with httpx.AsyncClient(base_url=settings.mcp_hub_url, timeout=10) as client:
             for tool in TOOL_DEFINITIONS:
                 try:
-                    await client.post("/tools", json=tool)
+                    resp = await client.post("/tools", json=tool)
+                    resp.raise_for_status()
                     logger.info(f"Seeded tool '{tool['name']}' to hub")
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code == 409:

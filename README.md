@@ -11,6 +11,7 @@ A production-ready, Kubernetes-native platform for running fully private AI — 
 | **Hybrid RAG** | Dense (pgvector) + BM25 (Elasticsearch) + cross-encoder reranking |
 | **Agentic RAG** | LangGraph self-correcting retrieval loop with Langfuse tracing |
 | **Graph RAG** | Neo4j knowledge graph + entity extraction + hybrid traversal |
+| **Doc Review** | Standalone CLI: cross-checks a client Solution Document against a large reference PDF (Docling + Qdrant hybrid search) and a writing-style rulebook |
 | **MCP Subsystem** | Tool catalog (PostgreSQL), MCP server, MCP client proxy — agents discover and call any tool via REST |
 | **API Gateway** | FastAPI, single entry point at `:30880`, proxies all subsystems |
 | **Observability** | Prometheus + Grafana for infrastructure metrics |
@@ -232,6 +233,7 @@ Full architecture details in `rag/ARCHITECTURE.md` and `mcp/ARCHITECTURE.md`.
 
 - **[RAG Pipelines](rag/README.md)** — Pipeline comparison, API reference, real request/response examples
 - **[RAG Architecture](rag/ARCHITECTURE.md)** — Data flows, component diagram, shared code map
+- **[Doc Review](rag/doc-review/README.md)** — Standalone Solution Document review CLI, setup + usage
 - **[MCP Subsystem](mcp/README.md)** — Tool catalog API, built-in tools, external server registration
 - **[MCP Architecture](mcp/ARCHITECTURE.md)** — Routing logic, wire protocol, DB schema
 - **[Technology Stack](docs/tech/)** — Reference docs for all technologies used
@@ -264,7 +266,7 @@ Full architecture details in `rag/ARCHITECTURE.md` and `mcp/ARCHITECTURE.md`.
 ```
 private_enterprise_ai/
 ├── apps/api-gateway/      # FastAPI gateway — proxies all subsystems at :30880
-├── rag/                   # RAG pipelines (hybrid-rag, agentic-rag, graph-rag, shared/)
+├── rag/                   # RAG pipelines (hybrid-rag, agentic-rag, graph-rag, doc-review, shared/)
 ├── mcp/                   # MCP subsystem (mcp-hub, mcp-server, mcp-client, shared/)
 ├── packages/shared-db/    # asyncpg pool helper + DB migrations
 ├── infra/helm/            # Helm charts for all services

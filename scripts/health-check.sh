@@ -118,7 +118,7 @@ if command -v kubectl >/dev/null 2>&1 && kubectl get nodes >/dev/null 2>&1; then
         psql -U postgres -d private_ai -tAc "SELECT 1 FROM pg_extension WHERE extname='vector'" 2>/dev/null | grep -q 1; then
         pass "pgvector extension enabled in private_ai DB"
     else
-        fail "pgvector extension enabled in private_ai DB" "run migrations/003_add_pgvector_embedding.sql"
+        fail "pgvector extension enabled in private_ai DB" "run: make migrate"
     fi
 else
     warn "Kubernetes workloads" "cluster unreachable — skipped"

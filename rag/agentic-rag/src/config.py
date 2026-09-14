@@ -12,8 +12,23 @@ class Settings(BaseSettings):
     # PostgreSQL
     database_url: str = "postgresql://postgres:changeme-postgres-admin@postgres:5432/private_ai"
 
-    # Hybrid RAG retriever (internal service)
+    # Hybrid RAG retriever (internal service) — used as the legacy/fallback
+    # retrieval path when MCP tool-calling is disabled, the hub is unreachable,
+    # or the model returns no tool call.
     hybrid_rag_url: str = "http://hybrid-rag:8001"
+
+    # MCP: dynamic tool discovery/invocation for the retrieval step.
+    # Tools are fetched from mcp-hub's catalog at runtime — not hardcoded —
+    # so registering a new tool there (including remote/external ones) makes
+    # it available to the agent with no code change.
+    mcp_hub_url: str = "http://mcp-hub:8010"
+    mcp_timeout: int = 30
+    # How long the fetched tool catalog is cached in-process before refetching.
+    mcp_tools_cache_ttl: int = 60
+    # Kill switch — False skips MCP entirely and goes straight to the legacy
+    # hybrid-rag path. Useful if the deployed LLM model doesn't support tool
+    # calling.
+    mcp_tool_calling_enabled: bool = True
 
     # Infinity services
     infinity_embeddings_url: str = "http://infinity-embeddings:7997"

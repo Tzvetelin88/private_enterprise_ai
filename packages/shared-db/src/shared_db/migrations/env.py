@@ -1,6 +1,17 @@
-"""Alembic environment configuration."""
+"""Alembic environment configuration.
+
+Async variant: alembic.ini's sqlalchemy.url uses the `+asyncpg` dialect (the
+same driver the services use via shared_db.pool), which only works through
+SQLAlchemy's async engine — the classic sync engine_from_config()/connect()
+pattern raises at runtime against an asyncpg URL. Migrations run via
+connection.run_sync() inside an asyncio event loop instead.
+"""
+import asyncio
+
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
 
@@ -16,19 +27,24 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    connectable = engine_from_config(
+def _do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=None)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_migrations_online() -> None:
+    connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-    with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=None)
-        with context.begin_transaction():
-            context.run_migrations()
+    async with connectable.connect() as connection:
+        await connection.run_sync(_do_run_migrations)
+    await connectable.dispose()
 
 
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    run_migrations_online()
+    asyncio.run(run_migrations_online())

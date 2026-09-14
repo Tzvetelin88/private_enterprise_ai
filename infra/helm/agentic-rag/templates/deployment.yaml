@@ -33,6 +33,10 @@ spec:
           value: {{ .Values.config.llmModel | quote }}
         - name: MAX_ITERATIONS
           value: {{ .Values.config.maxIterations | quote }}
+        - name: MCP_HUB_URL
+          value: {{ .Values.config.mcpHubUrl | quote }}
+        - name: MCP_TOOL_CALLING_ENABLED
+          value: {{ .Values.config.mcpToolCallingEnabled | quote }}
         - name: TRACING_BACKEND
           value: {{ .Values.config.tracingBackend | quote }}
         - name: LANGFUSE_HOST

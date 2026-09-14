@@ -93,15 +93,31 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Redis cache setup failed: %s", exc)
 
-    # Build the LangGraph graph (async — sets up checkpointer + HITL)
+    # Build the LangGraph graph (async — sets up checkpointer + HITL).
+    # AsyncPostgresSaver needs a psycopg (v3) pool specifically — it does not
+    # accept an asyncpg pool, even though both wrap the same "postgresql://"
+    # DSN. Nothing else in this service uses this pool, so there's no reason
+    # to juggle two Postgres drivers.
     pool = None
     if settings.checkpointing_enabled:
         try:
-            import asyncpg  # type: ignore[import-untyped]
-            pool = await asyncpg.create_pool(settings.database_url, min_size=1, max_size=5)
-            logger.info("asyncpg pool created for LangGraph checkpointing")
+            from psycopg_pool import AsyncConnectionPool
+
+            # autocommit=True is required, not just a preference: AsyncPostgresSaver.setup()
+            # runs `CREATE INDEX CONCURRENTLY` migrations, which Postgres refuses to run
+            # inside any transaction — and psycopg3 connections default to autocommit=False
+            # (every statement implicitly wrapped in one).
+            pool = AsyncConnectionPool(
+                conninfo=settings.database_url,
+                min_size=1,
+                max_size=5,
+                kwargs={"autocommit": True},
+                open=False,
+            )
+            await pool.open()
+            logger.info("psycopg AsyncConnectionPool created for LangGraph checkpointing")
         except Exception as exc:
-            logger.warning("Could not create asyncpg pool for checkpointing: %s", exc)
+            logger.warning("Could not create psycopg pool for checkpointing: %s", exc)
 
     app.state.compiled_graph = await build_graph(pool)
     app.state.db_pool = pool
@@ -185,6 +201,7 @@ async def query(request: QueryRequest):
         "iterations": 0,
         "grade": "",
         "query_rewrites": [],
+        "tool_calls": [],
         "trace_url": "",
         # Only the trace_id (a plain string) goes into GraphState — it gets
         # checkpointed to PostgreSQL, and a live Langfuse SDK object would not
@@ -243,6 +260,7 @@ async def query(request: QueryRequest):
                 "iterations": final_state.get("iterations", 0),
                 "final_grade": final_state.get("grade", ""),
                 "query_rewrites": final_state.get("query_rewrites", []),
+                "tool_calls": final_state.get("tool_calls", []),
                 "trace_url": trace_url,
                 "trace_id": trace_id,
                 "checkpoint_id": thread_id,
@@ -256,6 +274,7 @@ async def query(request: QueryRequest):
             "iterations": final_state.get("iterations", 0),
             "final_grade": final_state.get("grade", ""),
             "query_rewrites": final_state.get("query_rewrites", []),
+            "tool_calls": final_state.get("tool_calls", []),
             "trace_url": trace_url,
             "trace_id": trace_id,
             "checkpoint_id": thread_id if settings.checkpointing_enabled else "",
@@ -325,6 +344,7 @@ async def approve(request: ApproveRequest):
             "iterations": final_state.get("iterations", 0),
             "final_grade": final_state.get("grade", ""),
             "query_rewrites": final_state.get("query_rewrites", []),
+            "tool_calls": final_state.get("tool_calls", []),
             "trace_url": final_state.get("trace_url", ""),
             "trace_id": trace_id,
             "checkpoint_id": request.thread_id,

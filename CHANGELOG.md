@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 2026-08-13
+
+#### Added
+- **Doc Review** (`rag/doc-review/`) — standalone CLI that cross-checks a client Solution Document (`.docx`) against a large reference PDF and a writing-style Review Process doc. Docling structured parsing (headings/tables/page metadata) → hybrid dense (`bge-large-en-v1.5`) + sparse (BM25) chunking → Qdrant hybrid retrieval → retrieve-then-rerank → `qwen3.5:4b` judgment with grounded, cite-or-abstain prompting. Two-directional technical review (accuracy + scope-bounded completeness) plus a separate style/process compliance pass, verified findings only, rendered to a page-cited Markdown report. `make doc-review-up` / `make doc-review-ingest` / `make doc-review-review`; see `rag/doc-review/README.md`.
+
 ### 2026-08-12
 
 #### Added

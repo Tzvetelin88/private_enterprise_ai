@@ -1,16 +1,23 @@
 """LangGraph nodes for the agentic RAG workflow.
 
 Nodes:
-  retrieve          — fetch top-k docs from hybrid-rag service
-  grade_documents   — LLM binary relevance scoring (Pydantic-validated output)
-  rewrite_query     — LLM query rephrasing
-  generate          — final answer generation
+  select_and_call_tool — LLM dynamically picks an MCP tool from the live hub
+                          catalog (bind_tools) and executes it; falls back to
+                          a hardcoded hybrid-rag call if MCP is disabled,
+                          unreachable, or the model declines to call a tool
+  grade_documents       — LLM binary relevance scoring (Pydantic-validated output)
+  rewrite_query         — LLM query rephrasing
+  generate              — final answer generation
 
 LangChain patterns used:
-  - All LLM calls go through a LangChain ChatOllama Runnable (llm_with_fallback),
-    not raw httpx — this is what makes the Redis LLM cache (set_llm_cache())
-    and .with_fallbacks() actually take effect; neither can intercept a raw
-    httpx.post() call.
+  - All LLM calls go through a LangChain ChatOllama Runnable (llm_with_fallback
+    or a per-call tools-bound variant from _build_llm()), not raw httpx — this
+    is what makes the Redis LLM cache (set_llm_cache()) and .with_fallbacks()
+    actually take effect; neither can intercept a raw httpx.post() call.
+  - select_and_call_tool uses native structured tool-calling (.bind_tools()
+    against the OpenAI-style schemas mcp_tools.to_openai_tool_schema() derives
+    from mcp-hub's catalog) rather than hand-rolled prompt/JSON parsing — same
+    discipline as GradeResult below, applied to tool selection.
   - GradeResult (Pydantic BaseModel) + PydanticOutputParser is the primary
     grade-parsing path, guaranteeing grade is always "relevant" or "irrelevant".
     It retries up to 2 times on malformed output before falling back to a
@@ -22,7 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from langchain_core.exceptions import OutputParserException
@@ -34,7 +41,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from .config import settings
 from .state import GraphState
-from . import tracing
+from . import mcp_tools, tracing
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +59,17 @@ class GradeResult(BaseModel):
 _grade_parser = PydanticOutputParser(pydantic_object=GradeResult)
 
 
-def _build_llm():
+def _build_llm(tools: list[dict[str, Any]] | None = None):
     """Build the primary+fallback LangChain chat model chain.
 
     Routing every node's LLM call through this Runnable (instead of raw httpx)
     is what makes F2 (transparent fallback), F3 (Redis response cache), and
     Langfuse's automatic per-call generation spans all work — they all key off
     LangChain's invocation path.
+
+    When *tools* is given (OpenAI-style schemas, see mcp_tools.to_openai_tool_schema),
+    both primary and fallback models are bound with .bind_tools() before the
+    fallback chain is composed, so failover still preserves tool-calling.
     """
     primary = ChatOllama(
         base_url=settings.llm_url,
@@ -72,6 +83,9 @@ def _build_llm():
         timeout=settings.llm_timeout,
         reasoning=settings.llm_reasoning_enabled,
     )
+    if tools:
+        primary = primary.bind_tools(tools)
+        fallback = fallback.bind_tools(tools)
     return primary.with_fallbacks([fallback])
 
 
@@ -110,11 +124,16 @@ def _parse_grade(raw: str, retries_left: int = 2) -> str:
     return "relevant"
 
 
-async def retrieve(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
-    """Retrieve documents from the hybrid-rag service."""
+async def _legacy_retrieve_hybrid_rag(state: GraphState, lf_trace) -> GraphState:
+    """Hardcoded fallback retrieval path — calls hybrid-rag directly.
+
+    Used when MCP tool-calling is disabled, mcp-hub's catalog is unreachable
+    or empty, or the model declines to call a tool. This is the pre-MCP
+    behavior, kept as a safety net so a hub outage degrades gracefully instead
+    of failing the request.
+    """
     question = state["question"]
-    lf_trace = tracing.get_trace(state.get("trace_id", ""))
-    span = tracing.create_span(lf_trace, "retrieve", input={"query": question, "top_k": settings.top_k})
+    span = tracing.create_span(lf_trace, "retrieve_fallback", input={"query": question, "top_k": settings.top_k})
 
     async with httpx.AsyncClient(base_url=settings.hybrid_rag_url, timeout=60) as client:
         try:
@@ -134,6 +153,71 @@ async def retrieve(state: GraphState, config: RunnableConfig | None = None) -> G
         **state,
         "documents": documents,
         "iterations": state.get("iterations", 0) + 1,
+        "tool_calls": state.get("tool_calls", []),
+    }
+
+
+async def select_and_call_tool(state: GraphState, config: RunnableConfig | None = None) -> GraphState:
+    """Let the LLM dynamically pick and call an MCP tool for this question.
+
+    Fetches the live tool catalog from mcp-hub, binds it to the LLM as native
+    tool-calling schemas, and lets the model decide which tool (if any) to
+    invoke. The call is executed through mcp-hub's real routing endpoint, so
+    it's logged to mcp_audit_log and traced in Langfuse exactly like a manual
+    call would be — not a side-channel.
+
+    Falls back to _legacy_retrieve_hybrid_rag when: MCP tool-calling is
+    disabled (settings.mcp_tool_calling_enabled=False), the hub's catalog is
+    empty/unreachable, the tool-calling LLM invocation errors, or the model
+    returns no tool_calls.
+    """
+    question = state["question"]
+    lf_trace = tracing.get_trace(state.get("trace_id", ""))
+
+    if not settings.mcp_tool_calling_enabled:
+        return await _legacy_retrieve_hybrid_rag(state, lf_trace)
+
+    catalog = await mcp_tools.fetch_tool_catalog()
+    if not catalog:
+        logger.info("select_and_call_tool: no MCP tools available — falling back to hybrid-rag")
+        return await _legacy_retrieve_hybrid_rag(state, lf_trace)
+
+    tool_schemas = [mcp_tools.to_openai_tool_schema(t) for t in catalog]
+    select_span = tracing.create_span(
+        lf_trace, "select_tool", input={"query": question, "available_tools": [t["name"] for t in catalog]}
+    )
+
+    try:
+        llm = _build_llm(tools=tool_schemas)
+        response = await llm.ainvoke([HumanMessage(content=question)], config=config)
+    except Exception as e:
+        logger.warning(f"select_and_call_tool: tool-calling LLM invocation failed ({e}) — falling back")
+        tracing.end_span(select_span, output=f"error: {e}", level="WARNING")
+        return await _legacy_retrieve_hybrid_rag(state, lf_trace)
+
+    chosen = getattr(response, "tool_calls", None) or []
+    if not chosen:
+        tracing.end_span(select_span, output="no tool call returned — falling back to hybrid-rag")
+        return await _legacy_retrieve_hybrid_rag(state, lf_trace)
+
+    tracing.end_span(select_span, output={"chosen_tools": [tc["name"] for tc in chosen]})
+
+    documents: list[dict[str, Any]] = []
+    executed: list[dict[str, Any]] = []
+    for tc in chosen:
+        tool_name = tc["name"]
+        tool_args = tc.get("args", {})
+        call_span = tracing.create_span(lf_trace, f"call_tool:{tool_name}", input=tool_args)
+        result = await mcp_tools.call_tool(tool_name, tool_args)
+        tracing.end_span(call_span, output=result)
+        documents.extend(mcp_tools.normalize_to_documents(tool_name, result))
+        executed.append({"name": tool_name, "arguments": tool_args})
+
+    return {
+        **state,
+        "documents": documents,
+        "iterations": state.get("iterations", 0) + 1,
+        "tool_calls": state.get("tool_calls", []) + executed,
     }
 
 

@@ -24,14 +24,14 @@ echo "⏳ Waiting for Infinity to be ready..."
 echo "   (First run downloads ~200MB model — this may take several minutes)"
 kubectl rollout status deployment/infinity-embeddings --timeout=600s
 
-# Enable pgvector + add the embedding column that Stage 1's initdb scripts
+# Apply all pending Alembic migrations — including 003, which enables
+# pgvector and adds the embedding column that Stage 1's initdb scripts
 # deliberately deferred to this stage (see values-postgresql.yaml comment).
-# Idempotent (IF NOT EXISTS throughout) — safe to re-run.
+# Runs from the host against Postgres's NodePort (alembic.ini's configured
+# URL); idempotent and safe to re-run — alembic tracks what's already applied.
 echo ""
-echo "🗄️  Enabling pgvector extension and embedding column..."
-kubectl exec -i postgresql-0 -c postgresql -- env PGPASSWORD=changeme-postgres-admin \
-    psql -U postgres -d private_ai -f - < "${PROJECT_ROOT}/packages/shared-db/src/shared_db/migrations/003_add_pgvector_embedding.sql" \
-    || echo "   ⚠️  Could not apply pgvector migration automatically — run manually if needed"
+bash "${PROJECT_ROOT}/scripts/apply-migrations.sh" \
+    || echo "   ⚠️  Could not apply migrations automatically — run manually: bash scripts/apply-migrations.sh"
 
 # Rebuild API Gateway image with embeddings support
 echo ""

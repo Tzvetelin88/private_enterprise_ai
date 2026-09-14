@@ -1,8 +1,8 @@
 """LangGraph StateGraph for the self-correcting RAG workflow.
 
 Graph:
-  retrieve → grade_documents → generate (if relevant)
-                             → rewrite_query → retrieve (if irrelevant, max 3 iterations)
+  select_and_call_tool → grade_documents → generate (if relevant)
+                                          → rewrite_query → select_and_call_tool (if irrelevant, max 3 iterations)
 
 LangGraph patterns used:
   - AsyncPostgresSaver checkpointer: workflow state persists to PostgreSQL; survives restarts
@@ -15,7 +15,7 @@ import logging
 from langgraph.graph import END, StateGraph  # type: ignore[import-untyped]
 
 from .config import settings
-from .nodes import generate, grade_documents, retrieve, rewrite_query
+from .nodes import generate, grade_documents, select_and_call_tool, rewrite_query
 from .state import GraphState
 
 logger = logging.getLogger(__name__)
@@ -34,27 +34,28 @@ async def build_graph(pool=None):
     """Build and compile the LangGraph StateGraph.
 
     Args:
-        pool: asyncpg connection pool for PostgreSQL checkpointing.
-              When None or checkpointing_enabled=False, compiles without a checkpointer.
+        pool: psycopg AsyncConnectionPool for PostgreSQL checkpointing (AsyncPostgresSaver
+              requires psycopg, not asyncpg). When None or checkpointing_enabled=False,
+              compiles without a checkpointer.
 
     Returns:
         A compiled LangGraph CompiledGraph ready for ainvoke().
     """
     graph = StateGraph(GraphState)
 
-    graph.add_node("retrieve", retrieve)
+    graph.add_node("select_and_call_tool", select_and_call_tool)
     graph.add_node("grade_documents", grade_documents)
     graph.add_node("rewrite_query", rewrite_query)
     graph.add_node("generate", generate)
 
-    graph.set_entry_point("retrieve")
-    graph.add_edge("retrieve", "grade_documents")
+    graph.set_entry_point("select_and_call_tool")
+    graph.add_edge("select_and_call_tool", "grade_documents")
     graph.add_conditional_edges(
         "grade_documents",
         _should_generate,
         {"generate": "generate", "rewrite_query": "rewrite_query"},
     )
-    graph.add_edge("rewrite_query", "retrieve")
+    graph.add_edge("rewrite_query", "select_and_call_tool")
     graph.add_edge("generate", END)
 
     checkpointer = None

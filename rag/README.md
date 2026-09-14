@@ -2,6 +2,8 @@
 
 Three production-grade Retrieval-Augmented Generation pipelines — each an independently deployable FastAPI service, accessible through the API Gateway at `:30880`.
 
+There's also a fourth, standalone tool that isn't a service: **[Doc Review](doc-review/README.md)** — a local CLI that cross-checks a client Solution Document against a large reference PDF and a writing-style rulebook. It intentionally uses a different set of RAG building blocks (Docling structured parsing, Qdrant hybrid dense+sparse retrieval) than the three services below, which all share pgvector — see its README for why.
+
 ---
 
 ## Which Pipeline to Use?

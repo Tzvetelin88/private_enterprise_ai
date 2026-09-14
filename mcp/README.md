@@ -42,12 +42,13 @@ curl http://localhost:8011/health   # {"status":"healthy","service":"mcp-server"
 curl http://localhost:8012/health   # {"status":"healthy","service":"mcp-client"}
 ```
 
-The `mcp_tools` and `mcp_audit_log` tables must exist in PostgreSQL. Apply if not already done:
+The `mcp_tools` and `mcp_audit_log` tables must exist in PostgreSQL — they come from Alembic migration `002_create_mcp_tables`. Apply all pending migrations (idempotent, safe to re-run) from the host against Postgres's NodePort:
 
 ```bash
-kubectl exec -it postgresql-0 -- env PGPASSWORD=changeme-postgres-admin \
-  psql -U postgres -d private_ai -f - < packages/shared-db/src/shared_db/migrations/002_create_mcp_tables.sql
+make migrate   # or: bash scripts/apply-migrations.sh
 ```
+
+This creates/reuses a `.venv` at the repo root and installs `packages/shared-db` into it (pulls in `alembic`, `sqlalchemy[asyncio]`, `asyncpg`, and `greenlet` — don't `pip install alembic` alone, it won't get the other three). No need to activate the venv yourself; the script calls it directly.
 
 ### Deploy to Kubernetes
 

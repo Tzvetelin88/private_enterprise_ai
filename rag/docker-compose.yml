@@ -50,6 +50,11 @@ services:
       - REDIS_URL=redis://redis:6379
       - LLM_CACHE_TTL=3600
       - CHECKPOINTING_ENABLED=true
+      # mcp-hub joins this rag-net too (see mcp/docker-compose.yml), so it's
+      # reachable by service name as long as that stack is also up. If it
+      # isn't, select_and_call_tool falls back to calling hybrid-rag directly.
+      - MCP_HUB_URL=http://mcp-hub:8010
+      - MCP_TOOL_CALLING_ENABLED=true
       # Set HITL_ENABLED=true to pause the workflow before generate for human approval
       - HITL_ENABLED=false
       # Set LLM_REASONING_ENABLED=true to re-enable "thinking" mode on models

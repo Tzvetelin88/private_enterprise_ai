@@ -15,6 +15,11 @@ config:
   llmUrl: "http://host.docker.internal:11434"
   llmModel: "qwen3.5:4b"
   maxIterations: 3
+  # Dynamic MCP tool discovery/invocation for the retrieval step — see
+  # mcp/ARCHITECTURE.md. Falls back to hybridRagUrl above if the hub is
+  # unreachable, its catalog is empty, or the model returns no tool call.
+  mcpHubUrl: "http://mcp-hub:8010"
+  mcpToolCallingEnabled: true
   tracingBackend: "langfuse"  # "langfuse" | "langsmith" | "none"
   langfuseHost: "http://langfuse:3000"
   langfusePublicKey: ""

@@ -26,17 +26,12 @@ for service in mcp-hub mcp-server mcp-client; do
     kind load docker-image ${service}:latest --name private-ai
 done
 
-# ── 2. Apply DB Migration ─────────────────────────────────────────────────────
+# ── 2. Apply DB Migrations ────────────────────────────────────────────────────
+# Runs the full alembic chain (includes 002, which creates mcp_tools/mcp_audit_log).
+# Idempotent and safe to re-run even if a later stage already applied it.
 echo ""
-echo "🗄️  Applying database migration (MCP tables)..."
-MIGRATION_FILE="${PROJECT_ROOT}/packages/shared-db/src/shared_db/migrations/002_create_mcp_tables.sql"
-if [ -f "$MIGRATION_FILE" ]; then
-    kubectl exec -i deploy/private-ai-postgresql -- psql \
-        -U postgres -d private_ai < "$MIGRATION_FILE" \
-        || echo "   ⚠️  Could not run migration automatically — run manually if needed"
-else
-    echo "   ⚠️  Migration file not found at $MIGRATION_FILE"
-fi
+bash "${PROJECT_ROOT}/scripts/apply-migrations.sh" \
+    || echo "   ⚠️  Could not apply migrations automatically — run manually: bash scripts/apply-migrations.sh"
 
 # ── 3. Deploy Helm Charts ─────────────────────────────────────────────────────
 

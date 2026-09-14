@@ -11,6 +11,11 @@ class GraphState(TypedDict):
     iterations: int
     grade: str  # "relevant" | "irrelevant"
     query_rewrites: list[str]
+    # MCP tool calls the LLM actually chose and executed this run, e.g.
+    # [{"name": "rag_hybrid_query", "arguments": {...}}] — plain dicts (not the
+    # live AIMessage.tool_calls objects) so this stays checkpoint-serializable,
+    # same reasoning as trace_id below.
+    tool_calls: list[dict[str, Any]]
     trace_url: str
     # Langfuse trace id threaded through the graph. A plain string (not the live
     # SDK trace object) so this field stays serialisable when AsyncPostgresSaver

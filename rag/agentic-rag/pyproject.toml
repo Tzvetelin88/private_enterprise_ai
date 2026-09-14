@@ -18,10 +18,23 @@ dependencies = [
     # LangGraph + checkpointing
     "langgraph>=0.2.0",
     "langgraph-checkpoint-postgres>=2.0.0",
+    # langgraph-checkpoint-postgres depends on plain `psycopg`, which needs
+    # libpq present on the system to actually connect — python:3.11-slim has
+    # none, so AsyncPostgresSaver fails at startup ("libpq library not found")
+    # and checkpointing silently falls back to disabled. [binary] bundles its
+    # own compiled libpq in the wheel, no Dockerfile/apt-get changes needed.
+    "psycopg[binary]>=3.2.0",
     # LangChain + structured output + fallback chains
-    "langchain>=0.2.0",
-    "langchain-community>=0.2.0",
-    "langchain-ollama>=0.2.0",
+    # Capped <1.0.0: langchain 1.0 removed the langchain.callbacks submodule
+    # (callback base classes moved to langchain-core only), which breaks
+    # langfuse<3.0's CallbackHandler (from langchain.callbacks.base import ...).
+    # Moving to langfuse 3.x instead would fix that but requires upgrading the
+    # self-hosted Langfuse server too (v3 needs ClickHouse+Redis+S3, a much
+    # bigger infra change) — capping langchain here is the cheaper fix that
+    # keeps the currently-deployed langfuse v2 server working.
+    "langchain>=0.2.0,<1.0.0",
+    "langchain-community>=0.2.0,<1.0.0",
+    "langchain-ollama>=0.2.0,<1.0.0",
     # Langfuse tracing
     "langfuse>=2.0.0,<3.0.0",
     # Redis LLM response cache

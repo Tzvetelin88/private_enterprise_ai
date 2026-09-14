@@ -1,10 +1,10 @@
-.PHONY: help install dev-install test lint format clean \
+.PHONY: help install dev-install test lint format clean migrate \
         kind-up kind-up-mac kind-up-nvidia kind-down \
         model-server model-server-mac model-server-nvidia \
         gpu-verify deploy-all deploy-stage0 deploy-stage1 deploy-stage2 deploy-stage3 deploy-stage4 \
         deploy-hybrid-rag deploy-agentic-rag deploy-graph-rag \
         deploy-stage0-nvidia deploy-stage2-nvidia deploy-all-nvidia \
-        health-check
+        health-check doc-review-up doc-review-ingest doc-review-review
 
 help:
 	@echo "Available commands:"
@@ -16,6 +16,7 @@ help:
 	@echo "  make lint               - Run linters (ruff, mypy)"
 	@echo "  make format             - Format code (black, ruff)"
 	@echo "  make clean              - Clean build artifacts"
+	@echo "  make migrate            - Apply pending DB migrations (alembic upgrade head)"
 	@echo ""
 	@echo "Cluster Management:"
 	@echo "  make kind-up            - Create kind cluster (Mac default, no GPU mounts)"
@@ -46,6 +47,11 @@ help:
 	@echo "  make deploy-all-nvidia  - Deploy all stages (NVIDIA)"
 	@echo "  make deploy-stage0-nvidia - Stage 0: kind cluster + GPU Operator"
 	@echo "  make deploy-stage2-nvidia - Stage 2: vLLM in cluster (NVIDIA)"
+	@echo ""
+	@echo "Doc Review (standalone Solution Document review tool):"
+	@echo "  make doc-review-up      - Start its Qdrant + embeddings + reranker infra"
+	@echo "  make doc-review-ingest PDF=path/to/reference.pdf - Ingest the reference PDF (one-time/refresh)"
+	@echo "  make doc-review-review SOLUTION=path/to/solution.docx PROCESS_DOC=path/to/process.docx [OUT=report.md] - Run a review"
 
 install:
 	pip install -e .
@@ -68,6 +74,27 @@ format:
 clean:
 	rm -rf build dist *.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} +
+
+migrate:
+	bash scripts/apply-migrations.sh
+
+# ── Doc Review (standalone tool, own infra — see rag/doc-review/README.md) ──
+
+OUT ?= report.md
+
+doc-review-up:
+	docker compose -f rag/doc-review/docker-compose.yml up -d qdrant embeddings-large reranker
+
+doc-review-ingest:
+	@if [ -z "$(PDF)" ]; then echo "Usage: make doc-review-ingest PDF=path/to/reference.pdf"; exit 1; fi
+	cd rag/doc-review && PYTHONPATH=..:. python -m src.cli ingest-reference "$(PDF)"
+
+doc-review-review:
+	@if [ -z "$(SOLUTION)" ] || [ -z "$(PROCESS_DOC)" ]; then \
+		echo "Usage: make doc-review-review SOLUTION=path/to/solution.docx PROCESS_DOC=path/to/process.docx [OUT=report.md]"; \
+		exit 1; \
+	fi
+	cd rag/doc-review && PYTHONPATH=..:. python -m src.cli review "$(SOLUTION)" --process-doc "$(PROCESS_DOC)" --out "$(OUT)"
 	find . -type f -name "*.pyc" -delete
 
 # ── Cluster ────────────────────────────────────────────────────────────────────
